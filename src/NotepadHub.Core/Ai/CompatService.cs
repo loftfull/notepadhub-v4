@@ -115,6 +115,20 @@ public sealed class CompatServiceStore
                 if (id.Length <= 200 && !NotChat.IsMatch(id)) list.Add(id);
             }
         }
-        return list.Distinct().OrderBy(x => x, StringComparer.OrdinalIgnoreCase).Take(300).ToList();
+        return list.Distinct().OrderBy(Rank).ThenBy(x => x, StringComparer.OrdinalIgnoreCase).Take(300).ToList();
+    }
+
+    /// <summary>The strongest known chat models come first in a service list, so the first choice is a good one (a smaller number means stronger).</summary>
+    private static readonly string[] Strongest =
+    {
+        "gpt-oss:120b", "gpt-oss-120b", "kimi-k3", "deepseek-v4-pro", "glm-5.3", "mistral-large", "nemotron-3-ultra", "gemini-2.5-pro", "gemini-3", "llama-3.3-70b",
+        "gpt-oss:20b", "gpt-oss-20b", "kimi-k2", "glm-5", "deepseek-v4", "qwen3-235b", "gemma4:31b", "nemotron-3-super",
+    };
+
+    public static int Rank(string id)
+    {
+        for (var i = 0; i < Strongest.Length; i++)
+            if (id.Contains(Strongest[i], StringComparison.OrdinalIgnoreCase)) return i;
+        return Strongest.Length;
     }
 }

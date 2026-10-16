@@ -292,4 +292,11 @@ public class DefaultServiceTests
         var lm = new NotepadHub.Core.Ai.CompatServiceStore.Config(new Uri("http://127.0.0.1:1234/v1"), "LM");
         Assert.True(lm.KeyOptional);
     }
+
+    [Fact]
+    public void StrongestModelsComeFirstInAServiceList()
+    {
+        var ids = NotepadHub.Core.Ai.CompatServiceStore.ParseModelIds("{\"data\":[{\"id\":\"aaa-small\"},{\"id\":\"gpt-oss:20b-cloud\"},{\"id\":\"kimi-k3:cloud\"},{\"id\":\"gpt-oss:120b-cloud\"},{\"id\":\"zzz-text-embedding\"}]}");
+        Assert.Equal(new[] { "gpt-oss:120b-cloud", "kimi-k3:cloud", "gpt-oss:20b-cloud", "aaa-small" }, ids);
+    }
 }

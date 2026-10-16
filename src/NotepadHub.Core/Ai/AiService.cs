@@ -415,6 +415,9 @@ public sealed class AiService
         catch { RefundCloudCall(counted, 0); throw; }
     }
 
+    private const int ReasoningHeadroom = 1536;
+    private static readonly System.Text.RegularExpressions.Regex ReasoningModel = new(@"gpt-oss|deepseek|kimi|glm|qwen3|minimax|nemotron|(^|[-/:])(o1|o3|r1)($|[-/:])|thinking|reason", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
     private async Task<HttpResponseMessage> CompatRequestAsync(string model, string system, string user, int maxOut, double temperature, bool consent, CancellationToken ct)
     {
         var cfg = _compat?.Load() ?? throw new AiHttpException(503, "Сервис не настроен: укажите адрес и ключ в настройках AI.");
@@ -439,11 +442,16 @@ public sealed class AiService
             }
             counted = CommitCloudCall();
         }
-        var body = JsonSerializer.Serialize(new
+        // Reasoning models (gpt-oss, deepseek, kimi, glm...) spend part of max_tokens on thinking: with a tight limit the answer comes back empty.
+        // They get headroom, and gpt-oss (which every common service accepts it for) is asked to think briefly.
+        var reasoning = ReasoningModel.IsMatch(model);
+        var payload = new Dictionary<string, object?>
         {
-            model, stream = true, max_tokens = maxOut, temperature,
-            messages = new object[] { new { role = "system", content = system }, new { role = "user", content = user } },
-        });
+            ["model"] = model, ["stream"] = true, ["max_tokens"] = maxOut + (reasoning ? ReasoningHeadroom : 0), ["temperature"] = temperature,
+            ["messages"] = new object[] { new { role = "system", content = system }, new { role = "user", content = user } },
+        };
+        if (model.Contains("gpt-oss", StringComparison.OrdinalIgnoreCase)) payload["reasoning_effort"] = "low";
+        var body = JsonSerializer.Serialize(payload);
         try
         {
             return await SendWithRetryAsync(() =>

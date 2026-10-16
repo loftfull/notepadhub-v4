@@ -438,6 +438,25 @@ public class AiTests
     }
 
     [Fact]
+    public async Task Reasoning_models_get_token_headroom_and_gpt_oss_is_asked_to_think_briefly()
+    {
+        var (svc, h, dir) = MakeCompat("http://127.0.0.1:1234/v1", null);
+        try
+        {
+            var bodies = new List<string>();
+            h.Respond = r => { bodies.Add(r.Content!.ReadAsStringAsync().GetAwaiter().GetResult()); return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Sse, Encoding.UTF8, "text/event-stream") }; };
+            await Collect(svc, "c10", Body("compat", "gpt-oss:120b"));
+            await Collect(svc, "c11", Body("compat", "plain-model"));
+            using var reasoning = System.Text.Json.JsonDocument.Parse(bodies[0]);
+            using var plain = System.Text.Json.JsonDocument.Parse(bodies[1]);
+            Assert.Equal("low", reasoning.RootElement.GetProperty("reasoning_effort").GetString());
+            Assert.False(plain.RootElement.TryGetProperty("reasoning_effort", out _));
+            Assert.True(reasoning.RootElement.GetProperty("max_tokens").GetInt32() >= plain.RootElement.GetProperty("max_tokens").GetInt32() + 1500);
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
     public async Task Compat_service_on_the_internet_needs_consent_a_key_and_sends_the_key_only_as_a_header()
     {
         var (svc, h, dir) = MakeCompat("https://api.example.test/v1", "gsk_1234567890abcdef");

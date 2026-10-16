@@ -31,7 +31,13 @@ public partial class MainWindow : Window
     private bool _webReady;
 
     /// <summary>Native confirmation before text goes to a cloud model. The first free request per model and every paid request ask.</summary>
-    private Task<bool> ConfirmCloudSend(CloudSendInfo info) => Dispatcher.InvokeAsync(() =>
+#if DEBUG
+    // Debug builds only (tests with real cloud models): NOTEPADHUB_TEST_AUTOCONFIRM=1 answers the native question with "yes". Release builds always ask.
+    private static readonly bool AutoConfirm = Environment.GetEnvironmentVariable("NOTEPADHUB_TEST_AUTOCONFIRM") == "1";
+#else
+    private const bool AutoConfirm = false;
+#endif
+    private Task<bool> ConfirmCloudSend(CloudSendInfo info) => AutoConfirm ? Task.FromResult(true) : Dispatcher.InvokeAsync(() =>
         MessageBox.Show(this,
             (info.PriceUnknown
                 ? $"Отправить текст во внешний сервис «{info.Service}»?\n\nМодель: {info.Model}\nЦена и условия тарифа неизвестны приложению: проверьте их на сайте сервиса. Бесплатные тарифы часто используют присланные тексты для обучения моделей.\n"

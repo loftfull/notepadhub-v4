@@ -245,7 +245,7 @@ export function AiAssistantPanel({
     ? "Бесплатно"
     : selectedModel?.promptPrice !== undefined && selectedModel.completionPrice !== undefined
       ? `$${rubleFreeFormatter.format(selectedModel.promptPrice * 1_000_000)} / $${rubleFreeFormatter.format(selectedModel.completionPrice * 1_000_000)} за 1M входных / выходных токенов`
-      : selectedModel ? "Цена неизвестна — запуск заблокирован" : "";
+      : selectedModel ? (provider === "compat" ? "Цена и условия неизвестны: перед первым запуском программа спросит отдельно" : "Цена неизвестна — запуск заблокирован") : "";
   const persistRecipes = (recipes: PromptRecipe[]) => {
     const storage = getPromptStorage();
     if (!storage) {

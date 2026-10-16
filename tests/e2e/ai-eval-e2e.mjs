@@ -11,9 +11,18 @@ import path from "node:path";
 const require = createRequire(path.join(process.env.USERPROFILE, ".local/share/orca-design-tools/package.json"));
 const { chromium } = require("playwright-core");
 const [exe, zip, corpusDir, outFile] = process.argv.slice(2);
+// EVAL_MODE: local (Ollama on this computer) | pollinations (free online service, no key) | ollama-cloud (strong cloud models of the owner's Ollama account)
+// EVAL_MODEL: the model id to pick in the panel (optional; the first of the ranked list is used otherwise)
+const MODE = process.env.EVAL_MODE ?? "local";
+const MODEL = process.env.EVAL_MODEL ?? "";
+const ONLY = process.env.EVAL_ONLY ? process.env.EVAL_ONLY.split(",").map(Number) : null;   // e.g. "1,3,14": run only these task numbers
 const PORT = 9371;
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "nh4-e2e-"));
 execFileSync("powershell.exe", ["-NoProfile", "-Command", `Expand-Archive -LiteralPath '${zip}' -DestinationPath '${root}' -Force`]);
+if (MODE === "ollama-cloud") {
+  // the profile copy gets the service address of the owner's local Ollama (its cloud models are listed there)
+  fs.writeFileSync(path.join(root, "ai-compat.json"), JSON.stringify({ baseUrl: "http://127.0.0.1:11434/v1", name: "Ollama (облако)" }));
+}
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const read = (k) => fs.readFileSync(path.join(corpusDir, k + ".txt"), "utf8").trim();
 
@@ -49,7 +58,7 @@ const TASKS = [
 
 let child, browser, page;
 async function connect() {
-  child = spawn(exe, [], { env: { ...process.env, NOTEPADHUB_DATA_ROOT: root, NOTEPADHUB_DEBUG_PORT: String(PORT) }, stdio: "ignore" });
+  child = spawn(exe, [], { env: { ...process.env, NOTEPADHUB_DATA_ROOT: root, NOTEPADHUB_DEBUG_PORT: String(PORT), NOTEPADHUB_TEST_AUTOCONFIRM: "1" }, stdio: "ignore" });
   for (let i = 0; i < 240; i++) { try { if ((await fetch(`http://127.0.0.1:${PORT}/json/version`)).ok) break; } catch { /* starting */ } await sleep(250); }
   browser = await chromium.connectOverCDP(`http://127.0.0.1:${PORT}`);
   for (let i = 0; i < 120 && !page; i++) { for (const c of browser.contexts()) for (const p of c.pages()) if (p.url().startsWith("https://app.notepadhub.local")) page = p; if (!page) await sleep(250); }
@@ -69,6 +78,16 @@ const noteIds = {};
 try {
   await connect();
   await page.waitForSelector(".topbar", { timeout: 40000 });
+  await page.evaluate((p) => localStorage.setItem("nh4-ai-provider", p), MODE === "local" ? "ollama" : "compat");
+  await page.reload();
+  await page.waitForSelector(".topbar", { timeout: 40000 });
+  await page.getByRole("button", { name: "Открыть AI-помощник" }).click();
+  await page.locator(".ais-service summary").click();
+  if (MODEL) {
+    await page.waitForFunction((m) => [...document.querySelectorAll('select[aria-label="Выбрать модель"] option')].some((o) => o.value === m), MODEL, { timeout: 90000 });
+    await page.locator('select[aria-label="Выбрать модель"]').selectOption(MODEL);
+  }
+  await page.locator(".ais-service summary").click();
 
   // one clean note and one note with typos per text
   const typoInfo = {};
@@ -83,6 +102,7 @@ try {
 
   const modelInfo = { name: "" };
   for (const [id, letter, kind, label, flag] of TASKS) {
+    if (ONLY && !ONLY.includes(id)) continue;
     const rec = { id, letter, kind, label: kind === "custom" ? label.slice(0, 60) : label, typo: flag === "typo" };
     const t0 = Date.now();
     try {
@@ -97,6 +117,25 @@ try {
       if (!(await page.locator(".ai-assistant").count())) await page.getByRole("button", { name: "Открыть AI-помощник" }).click();
       await page.getByRole("radio", { name: "Вся заметка" }).click();
 
+      if (label === STRUCT) {
+        // "Структурировать" lays the note out directly (the model plus the fixed rules, one undo step): no proposal to wait for
+        await page.getByRole("button", { name: label, exact: true }).click();
+        await page.waitForFunction(() => [...document.querySelectorAll(".toast")].some((t) => /Автоформат|Оформлено ИИ|безопасное оформление|не изменилось|уже оформлена/i.test(t.textContent ?? "")), null, { timeout: 180000 }).catch(() => {});
+        await sleep(900);
+        rec.seconds = Math.round((Date.now() - t0) / 100) / 10;
+        rec.toast = (await page.locator(".toast").allInnerTexts()).join(" | ").slice(0, 300);
+        const after = await sheetText();
+        rec.output = after;
+        rec.sheetChanged = after !== before;
+        rec.applied = true;
+        await page.keyboard.press("Control+z");
+        await sleep(800);
+        rec.undoRestored = (await sheetText()) === before;
+        results.push(rec);
+        fs.appendFileSync(outFile, JSON.stringify(rec) + "\n");
+        console.log(`task ${id}/${TASKS.length} ${rec.label}: ${rec.seconds} s, changed=${rec.sheetChanged}, undo=${rec.undoRestored} :: ${rec.toast.slice(0, 120)}`);
+        continue;
+      }
       if (kind === "custom") {
         await page.locator("#ais-instruction").fill(label);
         await page.locator("#ais-instruction").press("Control+Enter");

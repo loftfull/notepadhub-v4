@@ -1,0 +1,38 @@
+{
+ "A_cat": {
+  "lang": "ru",
+  "title": "Кошка",
+  "chars": 880,
+  "url": "https://ru.wikipedia.org/wiki/%D0%9A%D0%BE%D1%88%D0%BA%D0%B0"
+ },
+ "B_internet": {
+  "lang": "ru",
+  "title": "Интернет",
+  "chars": 1415,
+  "url": "https://ru.wikipedia.org/wiki/%D0%98%D0%BD%D1%82%D0%B5%D1%80%D0%BD%D0%B5%D1%82"
+ },
+ "C_borscht": {
+  "lang": "ru",
+  "title": "Борщ",
+  "chars": 1037,
+  "url": "https://ru.wikipedia.org/wiki/%D0%91%D0%BE%D1%80%D1%89"
+ },
+ "D_solar": {
+  "lang": "ru",
+  "title": "Солнечная система",
+  "chars": 1469,
+  "url": "https://ru.wikipedia.org/wiki/%D0%A1%D0%BE%D0%BB%D0%BD%D0%B5%D1%87%D0%BD%D0%B0%D1%8F_%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BC%D0%B0"
+ },
+ "E_ai": {
+  "lang": "ru",
+  "title": "Искусственный интеллект",
+  "chars": 1279,
+  "url": "https://ru.wikipedia.org/wiki/%D0%98%D1%81%D0%BA%D1%83%D1%81%D1%81%D1%82%D0%B2%D0%B5%D0%BD%D0%BD%D1%8B%D0%B9_%D0%B8%D0%BD%D1%82%D0%B5%D0%BB%D0%BB%D0%B5%D0%BA%D1%82"
+ },
+ "F_coffee": {
+  "lang": "en",
+  "title": "Coffee",
+  "chars": 1412,
+  "url": "https://en.wikipedia.org/wiki/Coffee"
+ }
+}
