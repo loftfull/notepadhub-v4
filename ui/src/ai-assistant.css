@@ -1,0 +1,738 @@
+.editor-scroll {
+  justify-content: center;
+  background: #eef2f7;
+  padding: clamp(24px, 5vh, 56px) clamp(20px, 5vw, 72px) 32px;
+}
+
+.editor-column {
+  flex: 0 1 794px;
+  width: min(794px, 100%);
+  max-width: 794px;
+}
+
+.breadcrumbs {
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.document-toolbar {
+  margin-top: 0;
+  border-bottom: 0;
+}
+
+.editor-card {
+  margin-top: 4px;
+  min-height: 0;
+  aspect-ratio: 210 / 297;
+  border: 1px solid rgba(28, 42, 56, 0.14);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 26px 60px rgba(20, 27, 38, 0.18), 0 6px 18px rgba(20, 27, 38, 0.08);
+}
+
+.editor-card:focus-within {
+  outline: 2px solid rgba(71, 109, 88, 0.32);
+  outline-offset: 2px;
+}
+
+.editor-card .bn-editor {
+  min-height: 0;
+  padding: 40px 56px 56px !important;
+}
+
+.editor-card .bn-container {
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.editor-card .bn-block-content[data-content-type="paragraph"] {
+  color: var(--ink);
+}
+
+.editor-bottom {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.ai-assistant {
+  position: fixed;
+  z-index: 5;
+  top: 68px;
+  right: 18px;
+  bottom: 44px;
+  display: flex;
+  width: min(390px, calc(100vw - 32px));
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 20px 64px rgba(31, 31, 31, .2);
+  color: var(--ink);
+}
+
+/*
+ * Docked mode (desktop width): opening the AI assistant hides the note library, moves the paper to the left edge and gives
+ * all the freed space on the right to the assistant. The assistant is a full-height column, not a floating card.
+ */
+@media (min-width: 900px) {
+  .app-shell.ai-open .workspace.nav-collapsed > .sidebar {
+    display: flex;
+    flex: 0 0 0;
+    min-width: 0;
+    width: 0;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+  }
+
+  .app-shell.ai-open .main-panel {
+    margin-right: var(--ai-w);
+  }
+
+  .app-shell.ai-open .editor-scroll {
+    justify-content: flex-start;
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .app-shell.ai-open .ai-assistant {
+    top: 48px;
+    right: 0;
+    bottom: 0;
+    width: var(--ai-w);
+    border-width: 0 0 0 1px;
+    border-radius: 0;
+    box-shadow: -8px 0 24px rgba(20, 27, 38, .08);
+  }
+}
+
+/*
+ * Narrow window: the assistant is an explicit modal rail. The backdrop makes the temporary reading-mode change visible;
+ * the close button remains the reversible exit.
+ */
+@media (max-width: 899px) {
+  .app-shell.ai-open::before {
+    position: fixed;
+    z-index: 4;
+    inset: 68px 0 44px;
+    background: rgba(16, 24, 40, .18);
+    content: "";
+    pointer-events: auto;
+  }
+}
+
+.ai-assistant-header,
+.ai-assistant-header > div,
+.ai-proposal > header,
+.ai-proposal-actions,
+.ai-live-heading {
+  display: flex;
+  align-items: center;
+}
+
+.ai-assistant-header,
+.ai-proposal > header {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ai-assistant-header > div {
+  gap: 8px;
+  color: var(--accent-strong);
+}
+
+.ai-assistant-header strong {
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.ai-assistant-settings,
+.ai-assistant-settings label,
+.ai-context,
+.ai-command-section,
+.ai-custom-instruction,
+.ai-proposal {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-compact-intro {
+  display: grid;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.ai-show-advanced {
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+}
+
+.ai-show-advanced:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.ai-assistant-settings label > span,
+.ai-context > label,
+.ai-custom-instruction {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ai-assistant select,
+.ai-assistant input:not([type="checkbox"]),
+.ai-assistant textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.ai-assistant textarea {
+  min-height: 74px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.ai-assistant small,
+.ai-assistant-settings small {
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.ai-remote-consent {
+  padding: 10px;
+  border: 1px solid #e8c687;
+  border-radius: 8px;
+  background: #fff8e9;
+  color: #704d14;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ai-remote-consent p {
+  margin: 0 0 8px;
+}
+
+.ai-remote-consent label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ai-remote-consent input {
+  flex: none;
+  margin: 2px 0 0;
+}
+
+.ai-context details,
+.ai-writing-rule,
+.ai-prompt-library,
+.ai-writing-assets,
+.ai-advanced-controls {
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.ai-context summary,
+.ai-writing-rule summary,
+.ai-prompt-library summary,
+.ai-writing-assets summary,
+.ai-advanced-controls summary {
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.ai-advanced-controls[open] .ai-assistant-settings {
+  margin-top: 8px;
+}
+
+.ai-context pre,
+.ai-live pre {
+  max-height: 150px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font: 12px/1.55 "Segoe UI", sans-serif;
+}
+
+.ai-command-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.ai-command-grid button,
+.ai-custom-run,
+.ai-live > button,
+.ai-proposal-actions button,
+.ai-writing-rule button,
+.ai-prompt-library button {
+  min-height: 36px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-command-grid button:hover:not(:disabled),
+.ai-custom-run:hover:not(:disabled),
+.ai-proposal-actions button:hover,
+.ai-writing-rule button:hover,
+.ai-prompt-library button:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.ai-command-grid button:disabled,
+.ai-custom-run:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+
+.ai-custom-instruction {
+  position: relative;
+}
+
+.ai-custom-instruction small {
+  justify-self: end;
+}
+
+.ai-context-hint {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.ai-custom-run,
+.ai-proposal-actions .ai-accept {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+}
+
+.ai-writing-rule {
+  display: grid;
+  gap: 9px;
+}
+
+.ai-prompt-library > p {
+  margin: 2px 0 0;
+  line-height: 1.45;
+}
+
+.ai-prompt-library > div {
+  display: grid;
+  gap: 6px;
+}
+
+.ai-prompt-library-list {
+  max-height: 220px;
+  overflow: auto;
+}
+
+.ai-user-recipe {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 5px;
+}
+
+.ai-user-recipe > button:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-prompt-library .ai-recipe-action {
+  min-height: 30px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+.ai-recipe-delete {
+  color: #9a3b3b !important;
+}
+
+.ai-recipe-create {
+  margin-top: 8px;
+  width: 100%;
+}
+
+.ai-recipe-editor {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.ai-recipe-editor label {
+  display: grid;
+  gap: 4px;
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ai-recipe-editor textarea {
+  min-height: 80px;
+}
+
+.ai-recipe-editor-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.ai-recipe-editor-actions button {
+  flex: 1;
+  min-height: 32px;
+  text-align: center;
+}
+
+.ai-live,
+.ai-proposal {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-soft);
+}
+
+.ai-live-heading {
+  gap: 7px;
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ai-spinner {
+  animation: ai-spin 1s linear infinite;
+}
+
+@keyframes ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ai-live pre {
+  max-height: 220px;
+  margin: 8px 0;
+}
+
+.ai-proposal > header strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.ai-proposal > header small {
+  text-align: right;
+}
+
+.ai-proposal del,
+.ai-proposal-text {
+  display: block;
+  padding: 9px;
+  border-radius: 7px;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ai-proposal del {
+  background: var(--surface);
+  text-decoration-color: #bd7373;
+}
+
+.ai-proposal-text {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.ai-proposal-analysis {
+  padding: 0;
+  background: transparent;
+  white-space: normal;
+}
+
+.ai-analysis {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-analysis-section {
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.ai-analysis-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.ai-analysis-section > header span {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  text-align: center;
+  font-size: 11px;
+}
+
+.ai-analysis-section ul {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.ai-analysis-section li {
+  padding-left: 2px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.ai-analysis-section li p {
+  margin: 0;
+}
+
+.ai-analysis-section .ai-analysis-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  margin-top: 5px;
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.ai-analysis-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.ai-analysis-empty,
+.ai-analysis-fallback {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.ai-analysis-fallback {
+  margin-bottom: 7px;
+  font-style: italic;
+}
+
+.ai-proposal-actions {
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.ai-proposal-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ai-citation {
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--accent-strong);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ai-cost-estimate,
+.ai-provider-missing {
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 7px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.ai-provider-missing,
+.ai-assistant .ai-error {
+  color: #9f2828;
+}
+
+.selection-ai-toolbar {
+  position: fixed;
+  z-index: 4;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgba(31, 31, 31, .16);
+}
+
+.selection-ai-toolbar button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.selection-ai-toolbar button:hover {
+  background: var(--accent-soft);
+}
+
+.selection-ai-toolbar kbd {
+  margin-left: 3px;
+}
+
+.ai-citation-target {
+  border-radius: 5px;
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  background: var(--accent-soft) !important;
+  transition: background .25s ease;
+}
+
+.note-properties-panel {
+  flex: 0 0 300px;
+  width: 300px;
+  margin-top: 12px;
+}
+
+.theme-dark .ai-remote-consent {
+  border-color: #80642c;
+  background: #393020;
+  color: #f0d59d;
+}
+
+.theme-dark .ai-command-grid button,
+.theme-dark .ai-custom-run,
+.theme-dark .ai-live > button,
+.theme-dark .ai-proposal-actions button,
+.theme-dark .ai-writing-rule button,
+.theme-dark .ai-prompt-library button {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.theme-dark .ai-command-grid button:not(:disabled):hover,
+.theme-dark .ai-custom-run:not(:disabled):hover,
+.theme-dark .ai-proposal-actions .ai-accept {
+  background: var(--accent);
+  color: #101820;
+}
+
+@media (max-width: 760px) {
+  .editor-scroll {
+    padding: 18px 14px 24px;
+  }
+
+  .editor-column {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .editor-card .bn-editor {
+    padding: 24px 18px 32px !important;
+  }
+
+  .editor-card {
+    aspect-ratio: auto;
+  }
+
+  .ai-assistant {
+    top: 56px;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    padding: 14px;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .selection-ai-toolbar {
+    max-width: calc(100vw - 24px);
+  }
+}
+
+@media (max-width: 420px) {
+  .ai-assistant {
+    gap: 11px;
+    padding: 12px;
+  }
+
+  .editor-card {
+    border-radius: 10px;
+    box-shadow: 0 12px 30px rgba(20, 27, 38, 0.16);
+  }
+
+  .ai-command-grid {
+    gap: 6px;
+  }
+
+  .ai-command-grid button {
+    min-height: 38px;
+    padding: 4px 7px;
+    font-size: 11px;
+  }
+
+  .selection-ai-toolbar kbd {
+    display: none;
+  }
+}

@@ -1,0 +1,580 @@
+/*
+  Notepad Hub 4 — the area above the sheet.
+  Three rows, in the order the user works: where am I / search (app bar, 48) → which note (tab strip, 40) → this note and what I can do (document bar, 44).
+  Spacing uses the existing 4-based scale. Loaded after design-system.css; everything is scoped to .app-shell so older layered rules lose.
+*/
+
+/* ------------------------------------------------------------------ row 1: app bar */
+.app-shell .topbar {
+  height: 48px;
+  min-height: 48px;
+  padding: 0 var(--space-4);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 520px) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.app-shell .brand-lockup { display: flex; align-items: center; gap: var(--space-2); justify-self: start; min-width: 0; font-size: var(--text-md); font-weight: 650; letter-spacing: -0.01em; }
+.app-shell .topbar-center { display: flex; min-width: 0; justify-self: stretch; }
+.app-shell .topbar-actions { display: flex; align-items: center; justify-self: end; gap: var(--space-1); }
+
+.app-shell .topbar .search-trigger {
+  width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.app-shell .topbar .search-trigger:hover { background: var(--surface-hover); }
+.app-shell .topbar .search-trigger span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .topbar .search-trigger kbd { flex: 0 0 auto; font: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); color: var(--ink-muted); }
+
+.app-shell .library-menu summary { min-height: 32px; border-color: transparent; background: transparent; color: var(--ink-soft); padding: 0 var(--space-2); }
+.app-shell .library-menu summary:hover { background: var(--surface-hover); color: var(--ink); }
+.app-shell .library-menu[open] summary { border-color: var(--line-strong); background: var(--accent-soft); color: var(--accent-strong); }
+
+/* ------------------------------------------------------------------ row 2: note tabs */
+.app-shell .document-tabs {
+  height: 40px;
+  min-height: 40px;
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.app-shell .tabs-scroller {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;           /* no native scroll bars inside the strip: the list button and the keyboard cover long lists */
+  scroll-padding-inline: var(--space-3);
+}
+.app-shell .tabs-scroller::-webkit-scrollbar { display: none; }
+.app-shell .tab {
+  flex: 0 0 auto;
+  min-width: 96px;
+  max-width: 220px;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 500;
+}
+.app-shell .tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .tab:hover { background: var(--surface-hover); color: var(--ink); }
+.app-shell .tab.active-tab { color: var(--ink); font-weight: 650; border-bottom-color: var(--accent); background: transparent; }
+.app-shell .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+.app-shell .tabs-empty { align-self: center; padding: 0 var(--space-2); color: var(--ink-muted); font-size: 13px; }
+
+.app-shell .tab-actions { display: flex; align-items: center; flex: 0 0 auto; }
+.app-shell .tabs-all { align-self: center; }
+.app-shell .tabs-all summary { min-height: 28px; padding: 0 var(--space-2); border-color: transparent; background: transparent; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.app-shell .tabs-all summary:hover { background: var(--surface-hover); color: var(--ink); }
+.app-shell .tabs-all[open] summary { border-color: var(--line-strong); background: var(--accent-soft); color: var(--accent-strong); }
+.app-shell .tabs-all-menu { width: min(360px, calc(100vw - 24px)); }
+.app-shell .tabs-all-menu button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .tabs-all-menu button.is-current { background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; }
+.app-shell .new-tab { align-self: center; flex: 0 0 auto; width: 30px; height: 30px; border-radius: 7px; color: var(--ink-soft); }
+
+/* ------------------------------------------------------------------ row 3: document bar (aligned with the sheet) */
+.app-shell .editor-scroll { padding-top: var(--space-2); }
+.app-shell .document-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: 0 2px var(--space-1);
+}
+.app-shell .note-crumbs { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: var(--space-1); }
+.app-shell .crumb-folder,
+.app-shell .crumb-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.app-shell .crumb-folder { flex: 0 1 auto; max-width: 200px; color: var(--ink-muted); font-size: 13px; }
+.app-shell .crumb-title { flex: 1 1 auto; font-size: var(--text-md); font-weight: 650; }
+.app-shell .crumb-folder span,
+.app-shell .crumb-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .crumb-title svg { flex: 0 0 auto; color: var(--ink-muted); opacity: 0; transition: opacity 120ms ease-out; }
+.app-shell .crumb-title:hover svg,
+.app-shell .crumb-title:focus-visible svg { opacity: 1; }
+.app-shell .crumb-folder:hover,
+.app-shell .crumb-title:hover { background: var(--surface-hover); }
+.app-shell .crumb-folder:focus-visible,
+.app-shell .crumb-title:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.app-shell .crumb-folder:disabled,
+.app-shell .crumb-title:disabled { cursor: default; opacity: .6; }
+.app-shell .crumb-sep { flex: 0 0 auto; color: var(--line-strong); font-size: 14px; }
+
+.app-shell .document-actions { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-2); margin-left: auto; min-width: 0; }
+.app-shell .save-label { display: inline-flex; align-items: center; gap: 5px; max-width: 220px; margin-right: var(--space-1); color: var(--ink-muted); font-size: 12px; white-space: nowrap; }
+.app-shell .save-label svg { flex: 0 0 auto; color: #3f7a43; }
+.app-shell .save-label span { overflow: hidden; text-overflow: ellipsis; }
+.app-shell .save-label.save-error { color: #b3261e; font-weight: 600; }
+.app-shell .save-label.save-error svg { color: #b3261e; }
+.app-shell .tag-pill { height: 28px; padding: 0 var(--space-2); gap: 4px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface-soft); color: var(--ink-soft); font-size: 12px; }
+.app-shell .bar-icon { width: 32px; height: 32px; border-radius: 7px; }
+.app-shell .bar-icon[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-strong); }
+
+.app-shell .bar-ai {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.app-shell .bar-ai:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+.app-shell .bar-ai.is-open { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong); }
+.app-shell .bar-ai:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+.app-shell .theme-dark .bar-ai,
+.app-shell.theme-dark .bar-ai { color: #0b1b2b; }
+
+.app-shell .note-menu summary { min-width: 32px; min-height: 32px; justify-content: center; padding: 0; border-color: transparent; background: transparent; color: var(--ink-soft); }
+.app-shell .note-menu summary:hover { background: var(--surface-hover); color: var(--ink); }
+.app-shell .note-menu[open] summary { border-color: var(--line-strong); background: var(--accent-soft); color: var(--accent-strong); }
+
+/* ------------------------------------------------------------------ narrower windows */
+@media (max-width: 1100px) {
+  .app-shell .topbar { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .app-shell .library-menu summary span { display: none; }
+}
+@media (max-width: 900px) {
+  .app-shell .save-label span { display: none; }
+  .app-shell .crumb-folder { max-width: 120px; }
+}
+@media (max-width: 760px) {
+  .app-shell .brand-lockup span:not(.brand-mark) { display: none; }
+  .app-shell .topbar .search-trigger kbd { display: none; }
+  .app-shell .document-bar { flex-wrap: wrap; row-gap: var(--space-1); }
+  .app-shell .note-crumbs { flex: 1 1 100%; }
+  .app-shell .document-actions { flex: 1 1 100%; justify-content: flex-end; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .crumb-title svg { transition: none; }
+}
+
+/* ------------------------------------------------------------------ fixes found in the first inspection */
+/* styles.css centred this block with position:absolute and gave the logo a fixed width: both break the grid */
+.app-shell .brand-lockup { width: auto; }
+.app-shell .topbar-center { position: static; left: auto; transform: none; gap: 0; font-size: inherit; color: inherit; }
+.app-shell .topbar-actions { margin-left: 0; }
+
+/* menus: thin vertical scroll only, long titles are cut with an ellipsis instead of widening the menu */
+.app-shell .note-toolbar-menu { overflow-x: hidden; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.app-shell .note-toolbar-menu::-webkit-scrollbar { width: 8px; height: 0; }
+.app-shell .note-toolbar-menu::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
+.app-shell .note-toolbar-menu::-webkit-scrollbar-button { display: none; }
+.app-shell .note-toolbar-menu button { width: 100%; min-width: 0; }
+.app-shell .note-toolbar-menu button > svg { flex: 0 0 auto; }
+
+/* dark theme: the canvas behind the sheet must follow the theme, otherwise the document bar is light text on a light background */
+.app-shell.theme-dark .main-panel,
+.app-shell.theme-dark .editor-scroll { background: var(--canvas); }
+.app-shell.theme-dark .document-tabs,
+.app-shell.theme-dark .topbar { background: var(--surface); border-color: var(--line); }
+.app-shell.theme-dark .tab { color: var(--ink-soft); }
+.app-shell.theme-dark .tab:hover { background: var(--surface-hover); color: var(--ink); }
+.app-shell.theme-dark .tab.active-tab { color: var(--ink); }
+.app-shell.theme-dark .topbar .search-trigger { background: var(--surface-soft); border-color: var(--line-strong); }
+
+/* contrast: secondary text in the new bars must reach 4.5:1 on both the white and the canvas surfaces */
+.app-shell { --ink-quiet: #565d68; }
+.app-shell.theme-dark { --ink-quiet: #c4c7cc; }
+.app-shell .topbar .search-trigger,
+.app-shell .topbar .search-trigger kbd,
+.app-shell .crumb-folder,
+.app-shell .save-label,
+.app-shell .tabs-empty { color: var(--ink-quiet); }
+
+/* find & replace (Tiptap find-and-replace; default CSS is not injected because of the CSP) */
+.find-bar { display: flex; flex-direction: column; gap: 6px; margin: 0 0 8px; padding: 8px 10px; background: var(--surface-soft); border: 1px solid var(--line-strong); border-radius: 8px; }
+.find-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.find-input { flex: 1 1 160px; min-width: 120px; height: 30px; padding: 0 10px; color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 6px; font: inherit; }
+.find-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.find-count { min-width: 84px; color: var(--ink-soft); font-size: 12.5px; }
+.find-toggle, .find-action { height: 28px; padding: 0 10px; color: var(--ink); background: transparent; border: 1px solid var(--line-strong); border-radius: 6px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.find-toggle.is-on { color: var(--accent-strong); background: var(--accent-soft); border-color: var(--accent); }
+.find-action:disabled { opacity: .5; cursor: default; }
+.find-toggle:focus-visible, .find-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.find-and-replace-result { background: rgba(255, 213, 0, .45); border-radius: 2px; }
+.find-and-replace-result-current { background: rgba(255, 140, 0, .65); }
+
+/* text zoom (Ctrl +/-/0) */
+.editor-card .bn-editor { zoom: var(--editor-zoom, 1); }
+
+/* ------------------------------------------------------------------ v4.1: note controls live in the app bar, search is an expanding icon */
+.app-shell .topbar { grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-3); }
+.app-shell .topbar-note { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; }
+.app-shell .topbar-note .note-crumbs { flex: 1 1 auto; }
+.app-shell .topbar-note .crumb-title { font-size: 14px; }
+.app-shell .topbar-note .document-actions { gap: var(--space-1); }
+.app-shell .topbar-actions { gap: 2px; }
+.app-shell .topbar-actions .icon-button, .app-shell .topbar-actions .bar-icon { width: 32px; height: 32px; border-radius: 7px; }
+
+.app-shell .topbar-search { position: relative; z-index: 70; display: flex; align-items: center; justify-content: flex-end; }
+.app-shell .search-scrim { position: fixed; inset: 0; z-index: -1; background: transparent; }
+.app-shell .search-field {
+  display: flex; align-items: center; gap: var(--space-2);
+  width: clamp(220px, 28vw, 380px); height: 32px; padding: 0 var(--space-2) 0 var(--space-3);
+  border: 1px solid var(--accent); border-radius: 8px; background: var(--surface); color: var(--ink-soft);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  animation: search-grow 160ms cubic-bezier(.2, .8, .2, 1);
+  transform-origin: right center;
+}
+.app-shell .search-field input { flex: 1 1 auto; min-width: 0; height: 100%; border: 0; outline: none; background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; }
+.app-shell .search-field kbd { flex: 0 0 auto; font: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface-soft); color: var(--ink-quiet); }
+@keyframes search-grow { from { opacity: .4; transform: scaleX(.25); } to { opacity: 1; transform: scaleX(1); } }
+.app-shell .topbar-search .search-modal {
+  position: absolute; top: calc(100% + 8px); right: 0; left: auto; transform: none;
+  width: min(520px, calc(100vw - 24px)); max-height: min(70vh, 520px); overflow-y: auto;
+  border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface);
+  box-shadow: 0 18px 48px rgba(31, 31, 31, .18), 0 3px 10px rgba(31, 31, 31, .08);
+  scrollbar-width: thin;
+}
+.app-shell .topbar-search .search-modal-input { display: none; }
+.app-shell.theme-dark .search-field { background: var(--surface-soft); }
+@media (prefers-reduced-motion: reduce) { .app-shell .search-field { animation: none; } }
+
+@media (max-width: 1250px) { .app-shell .brand-lockup span:not(.brand-mark) { display: none; } }
+@media (max-width: 1000px) {
+  .app-shell .crumb-folder { max-width: 110px; }
+  .app-shell .tag-pill { display: none; }
+  .app-shell .bar-ai span { display: none; }
+  .app-shell .bar-ai { padding: 0 var(--space-2); }
+}
+@media (max-width: 760px) {
+  .app-shell .topbar { height: auto; min-height: 48px; padding-block: var(--space-1); grid-template-columns: auto minmax(0, 1fr); }
+  .app-shell .topbar-note { grid-column: 1 / -1; grid-row: 2; }
+  .app-shell .topbar-actions { grid-row: 1; grid-column: 2; }
+}
+
+/* search dropdown rows: icon + two-line text, same alignment for every row */
+.app-shell .topbar-search .search-results-label { display: flex; flex-direction: column; gap: 2px; padding: 12px 16px 8px; font-size: 12px; font-weight: 650; color: var(--ink-quiet); }
+.app-shell .topbar-search .search-results-label small { font-weight: 400; font-size: 11.5px; }
+.app-shell .topbar-search .search-result { display: flex; align-items: flex-start; justify-content: flex-start; width: 100%; gap: 12px; padding: 9px 16px; text-align: left; border: 0; background: transparent; cursor: pointer; }
+.app-shell .topbar-search .search-result > svg { flex: 0 0 auto; margin-top: 2px; color: var(--ink-muted); }
+.app-shell .topbar-search .search-result > span { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; align-items: flex-start; font-size: 14px; color: var(--ink); }
+.app-shell .topbar-search .search-result small { display: block; max-width: 100%; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--ink-quiet); }
+.app-shell .topbar-search .search-result[aria-selected="true"] { background: var(--accent-soft); }
+.app-shell .topbar-search .search-modal-footer { position: sticky; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); }
+
+/* the sheet is a clean page: the blue focus rule that cut across it was the ProseMirror focus outline (it ends where the text ends, not where the sheet ends); the caret already shows focus */
+.app-shell .editor-card .bn-editor:focus,
+.app-shell .editor-card .bn-editor:focus-visible,
+.app-shell .editor-card .ProseMirror:focus,
+.app-shell .editor-card .ProseMirror-focused { outline: none; box-shadow: none; }
+.app-shell .editor-card:focus-within { outline: none; }
+
+/* tags in the sidebar */
+.app-shell .tag-cloud { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 8px 8px; }
+.app-shell .tag-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; height: 26px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink-soft); font: inherit; font-size: 12px; cursor: pointer; }
+.app-shell .tag-chip span { color: var(--ink-quiet); font-variant-numeric: tabular-nums; }
+.app-shell .tag-chip:hover { background: var(--surface-hover); }
+.app-shell .tag-chip.is-on { color: var(--accent-strong); background: var(--accent-soft); border-color: var(--accent); }
+.app-shell .tag-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* [[links]] inside the sheet and the "Связи" panel under it (never on the sheet itself) */
+.bn-editor .wikilink { color: var(--accent-strong); background: var(--accent-soft); border-radius: 4px; cursor: pointer; }
+.bn-editor .wikilink-missing { color: var(--ink-quiet); background: transparent; text-decoration: underline dotted; }
+.app-shell .links-panel { margin: 12px 0 4px; padding: 0 4px; color: var(--ink-soft); }
+.app-shell .links-panel > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink-soft); list-style: none; padding: 6px 4px; border-radius: 6px; }
+.app-shell .links-panel > summary::-webkit-details-marker { display: none; }
+.app-shell .links-panel > summary span { font-weight: 400; color: var(--ink-quiet); }
+.app-shell .links-panel > summary:focus-visible { outline: 2px solid var(--accent); }
+.app-shell .links-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; padding: 6px 4px 12px; }
+.app-shell .links-grid h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: .02em; color: var(--ink-quiet); font-weight: 650; }
+.app-shell .links-grid p { margin: 0; font-size: 12.5px; color: var(--ink-quiet); }
+.app-shell .link-row { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; text-align: left; cursor: pointer; margin-bottom: 6px; }
+.app-shell .link-row b { font-size: 13px; }
+.app-shell .link-row small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-quiet); font-size: 12px; }
+.app-shell .link-row:hover { background: var(--surface-hover); }
+.app-shell .link-row.is-missing b { color: var(--ink-quiet); font-style: italic; }
+.app-shell .link-row:focus-visible { outline: 2px solid var(--accent); }
+.app-shell .link-picker-list { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; max-height: 260px; overflow-y: auto; }
+.app-shell .link-picker-list button { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+.app-shell .link-picker-list button span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .link-picker-list button small { color: var(--ink-quiet); }
+.app-shell .link-picker-list button.is-current { background: var(--accent-soft); }
+
+.app-shell .topbar-search .search-result .search-snippet { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--ink-quiet); }
+
+/* open tabs with a close button; "+" sits right after the last tab and stays visible (sticky) when the strip scrolls */
+.app-shell .tab-wrap { position: relative; display: flex; align-items: stretch; flex: 0 0 auto; }
+.app-shell .tab-wrap .tab { padding-right: 28px; }
+.app-shell .tab-close { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--ink-quiet); cursor: pointer; opacity: 0; transition: opacity 100ms ease-out; }
+.app-shell .tab-wrap:hover .tab-close, .app-shell .tab-wrap.is-active .tab-close, .app-shell .tab-wrap:focus-within .tab-close { opacity: 1; }
+.app-shell .tab-close:hover { background: var(--surface-hover); color: var(--ink); }
+.app-shell .tab-close:focus-visible { outline: 2px solid var(--accent); opacity: 1; }
+.app-shell .tabs-scroller .new-tab { position: sticky; right: 0; z-index: 2; align-self: center; margin-left: 2px; background: var(--surface); }
+.app-shell .tabs-scroller .new-tab:hover { background: var(--surface-hover); }
+@media (prefers-reduced-motion: reduce) { .app-shell .tab-close { transition: none; } }
+
+.app-shell .tab-list { display: flex; align-items: stretch; gap: 2px; flex: 0 0 auto; }
+
+/* tabs shrink (down to 84px) before the strip scrolls, so "+" stays next to the last tab in normal use */
+.app-shell .tab-list { flex: 0 1 auto; min-width: 0; }
+.app-shell .tab-wrap { flex: 0 1 200px; min-width: 84px; max-width: 220px; }
+.app-shell .tab-wrap .tab { flex: 1 1 auto; min-width: 0; max-width: none; width: 100%; }
+
+/* shortcuts help */
+.app-shell .shortcuts-dialog { max-width: 520px; max-height: min(80vh, 640px); overflow-y: auto; }
+.app-shell .shortcuts-dialog h3 { margin: 14px 0 6px; font-size: 12px; letter-spacing: .03em; color: var(--ink-quiet); font-weight: 650; }
+.app-shell .shortcuts-dialog dl { margin: 0; }
+.app-shell .shortcuts-dialog dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.app-shell .shortcuts-dialog dt { flex: 0 0 auto; white-space: nowrap; font-size: 12.5px; color: var(--ink-soft); }
+.app-shell .shortcuts-dialog dd { margin: 0; font-size: 13px; color: var(--ink); text-align: right; }
+.app-shell .shortcuts-dialog kbd { display: inline-block; margin: 0 2px; padding: 1px 6px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface-soft); font: inherit; font-size: 12px; color: var(--ink); }
+
+/* notes opened from a file */
+.app-shell .conflict-chip { height: 28px; padding: 0 var(--space-3); border: 1px solid #b3261e; border-radius: 999px; background: rgba(179, 38, 30, .1); color: #b3261e; font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.app-shell.theme-dark .conflict-chip { color: #ffb4ab; border-color: #ffb4ab; background: rgba(255, 180, 171, .12); }
+.app-shell .file-chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 999px; background: var(--surface-hover); color: var(--ink-quiet); font-size: 12px; }
+.app-shell .menu-hint { margin-left: auto; padding-left: 12px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-quiet); }
+.app-shell .conflict-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.app-shell .conflict-actions button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
+.app-shell .conflict-actions button small { font-weight: 400; color: var(--ink-quiet); font-size: 12px; }
+.app-shell .conflict-actions .form-submit { background: var(--accent); color: #fff; border-color: var(--accent); }
+.app-shell .conflict-actions .form-submit small { color: rgba(255, 255, 255, .85); }
+
+/* Home page: take in any material, see what is pinned and recent */
+.app-shell .editor-scroll[hidden] { display: none; }
+
+/* AI proposal as formatted text */
+.app-shell .ais-rich h4, .app-shell .ais-rich h5 { margin: 10px 0 4px; font-size: 14px; color: var(--ink); }
+.app-shell .ais-rich p { margin: 0 0 8px; line-height: 1.5; }
+.app-shell .ais-rich ul, .app-shell .ais-rich ol { margin: 0 0 8px; padding-left: 20px; }
+.app-shell .ais-rich blockquote { margin: 0 0 8px; padding-left: 10px; border-left: 3px solid var(--line-strong); color: var(--ink-quiet); }
+.app-shell .ais-rich pre { margin: 0 0 8px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--ink) 6%, transparent); white-space: pre-wrap; font-size: 12.5px; }
+.app-shell .ais-rich code { padding: 1px 4px; border-radius: 4px; background: color-mix(in srgb, var(--ink) 8%, transparent); font-size: .92em; }
+.app-shell .ais-stream { white-space: normal; }
+
+/* Transformations picker on the home page */
+.app-shell .ais-insight-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.app-shell .ais-insight { padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer; }
+.app-shell .ais-insight:disabled { opacity: .5; cursor: default; }
+
+/* Tabs as visible folder tabs: every tab has a border, the open one is raised and lit */
+.app-shell .tab-list { gap: 4px; align-items: flex-end; padding-top: 6px; }
+.app-shell .tab-wrap { height: 34px; align-self: flex-end; border: 1px solid color-mix(in srgb, var(--ink) 30%, var(--surface)); border-bottom: 0; border-radius: 9px 9px 0 0; background: color-mix(in srgb, var(--ink) 5%, var(--surface)); transition: background .12s, border-color .12s; }
+.app-shell .tab-wrap:hover { background: var(--surface-hover); border-color: color-mix(in srgb, var(--ink) 30%, var(--line-strong)); }
+.app-shell .tab-wrap.is-active { position: relative; z-index: 1; background: var(--surface); border-color: var(--accent); border-top: 2px solid var(--accent); box-shadow: 0 -3px 10px rgba(20, 24, 40, .08); }
+.app-shell .tab-wrap .tab, .app-shell .tab-wrap .tab.active-tab { border-bottom: 0; background: transparent; height: 100%; }
+.app-shell .tab-wrap .tab.active-tab { color: var(--ink); font-weight: 650; }
+.app-shell.theme-dark .tab-wrap { background: #2b2c30; border-color: #4a4b50; }
+.app-shell.theme-dark .tab-wrap.is-active { background: #353639; border-color: var(--accent); }
+
+/* Autoformat button and the title-and-tags dialog */
+.app-shell .autoformat-button { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line-strong)); border-radius: 999px; background: color-mix(in srgb, var(--accent) 9%, var(--surface)); color: var(--accent); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.app-shell .autoformat-button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
+.app-shell .autoformat-button:disabled { opacity: .45; cursor: default; }
+.app-shell .autoformat-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app-shell .meta-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.app-shell .meta-field input { padding: 9px 11px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 400; }
+
+/* Picture tools */
+.app-shell .image-modal { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; }
+.app-shell .image-modal textarea, .app-shell .image-modal select { padding: 9px 11px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 400; }
+.app-shell .image-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.app-shell .image-quick button, .app-shell .image-buttons button { padding: 6px 12px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+.app-shell .image-quick button:disabled { opacity: .45; cursor: default; }
+.app-shell .image-result { margin: 0; display: grid; gap: 6px; }
+.app-shell .image-result img { max-width: 100%; max-height: 320px; border-radius: 12px; border: 1px solid var(--line-strong); object-fit: contain; background: var(--surface-soft, #f4f5f7); }
+.app-shell .image-result figcaption, .app-shell .image-size { font-size: 12.5px; color: var(--ink-quiet); margin: 0; }
+.app-shell .image-error { margin: 0; color: #b42318; font-size: 13px; }
+.app-shell .image-stage { display: grid; place-items: center; min-height: 160px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 12px; background: repeating-conic-gradient(#e9ecf1 0 25%, #f7f8fa 0 50%) 0 0 / 16px 16px; }
+.app-shell .image-stage canvas { max-width: 100%; height: auto; }
+.app-shell .image-tools { display: grid; gap: 8px; }
+.app-shell .image-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.app-shell .image-buttons button { display: inline-grid; place-items: center; width: 36px; height: 32px; padding: 0; border-radius: 10px; }
+.app-shell .image-buttons button.is-on { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border-color: var(--accent); }
+.app-shell .image-check { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 13px; }
+.app-shell .image-slider { display: grid; grid-template-columns: 130px 1fr 44px; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); }
+.app-shell .image-slider output { text-align: right; color: var(--ink-quiet); font-variant-numeric: tabular-nums; }
+.app-shell .image-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.app-shell .image-pick button { padding: 2px; border: 2px solid transparent; border-radius: 8px; background: transparent; cursor: pointer; }
+.app-shell .image-pick button.is-on { border-color: var(--accent); }
+.app-shell .image-pick img { display: block; width: 64px; height: 48px; object-fit: cover; border-radius: 6px; }
+.app-shell .image-menu > summary { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; list-style: none; color: var(--ink-soft); }
+.app-shell .image-menu > summary:hover { background: var(--surface-hover); color: var(--ink); }
+
+/* Business tab strip: flat tabs side by side without gaps, one thin divider between them, the open tab lit by a top line and the sheet colour */
+.app-shell .document-tabs { background: color-mix(in srgb, var(--ink) 5%, var(--surface)); border-bottom: 1px solid color-mix(in srgb, var(--ink) 22%, var(--surface)); }
+.app-shell .tab-list { gap: 0; padding-top: 0; align-items: stretch; }
+.app-shell .tab-wrap { height: 100%; min-height: 38px; align-self: stretch; margin: 0; border: 0; border-right: 1px solid color-mix(in srgb, var(--ink) 20%, var(--surface)); border-radius: 0; background: transparent; box-shadow: none; transition: background .1s; }
+.app-shell .tab-wrap:hover { background: color-mix(in srgb, var(--ink) 7%, var(--surface)); border-color: color-mix(in srgb, var(--ink) 20%, var(--surface)); }
+.app-shell .tab-wrap.is-active { background: var(--surface); border: 0; border-right: 1px solid color-mix(in srgb, var(--ink) 20%, var(--surface)); border-top: 0; box-shadow: inset 0 2px 0 var(--accent), 0 1px 0 var(--surface); z-index: 1; }
+.app-shell .tab-wrap:first-child { border-left: 1px solid color-mix(in srgb, var(--ink) 20%, var(--surface)); }
+.app-shell .tab-wrap .tab, .app-shell .tab-wrap .tab.active-tab { border-radius: 0; height: 100%; padding-left: 14px; }
+.app-shell .tab-wrap .tab.active-tab { color: var(--ink); font-weight: 650; }
+.app-shell .tab-wrap { margin-bottom: -1px; }
+.app-shell.theme-dark .document-tabs { background: #2a2b2e; border-bottom-color: #46474b; }
+.app-shell.theme-dark .tab-wrap, .app-shell.theme-dark .tab-wrap:first-child { border-color: #46474b; background: transparent; }
+.app-shell.theme-dark .tab-wrap.is-active { background: #353639; }
+
+/* confirmation, tab menu, toast action */
+.app-shell .form-submit.is-danger { background: #b42318; border-color: #b42318; color: #fff; }
+.app-shell .confirm-modal { width: min(460px, calc(100vw - 32px)); }
+.tab-menu-backdrop { position: fixed; inset: 0; z-index: 30; }
+.tab-menu { position: fixed; min-width: 210px; }
+.app-shell .toast { display: inline-flex; align-items: center; gap: 10px; }
+.app-shell .toast-action { border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 700; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+.app-shell .toast-action:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+/* Two notes on the screen */
+.app-shell .split-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); font-size: 13px; }
+.app-shell .split-bar .split-title { display: inline-flex; align-items: center; gap: 6px; margin-right: auto; max-width: 28%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; color: var(--ink); }
+.app-shell .split-bar button, .app-shell .split-bar select { height: 30px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.app-shell .split-bar select { max-width: 240px; }
+.app-shell .split-bar button:hover { border-color: var(--accent); }
+.app-shell .split-bar .split-close { padding: 0 8px; }
+.app-shell .editor-scroll.is-split { gap: 12px; padding-left: 12px; padding-right: 12px; justify-content: stretch; }
+.app-shell .editor-scroll.is-split > .editor-column { flex: 1 1 0; min-width: 0; max-width: none; width: auto; }
+.app-shell .editor-scroll.is-split .editor-card { aspect-ratio: auto; min-height: calc(100vh - 240px); }
+.app-shell .editor-scroll.is-split .editor-card .bn-editor { padding: 28px 22px 32px !important; }
+.app-shell .second-column[hidden] { display: none; }
+.app-shell .icon-button.is-on { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--accent); }
+.app-shell .compare-modal { width: min(1040px, calc(100vw - 32px)); max-height: calc(100vh - 40px); display: flex; flex-direction: column; }
+.app-shell .cmp-head, .app-shell .cmp-row { display: grid; grid-template-columns: 1fr 44px 1fr; gap: 6px; }
+.app-shell .cmp-head { padding: 0 2px; color: var(--ink-quiet); font-size: 13px; }
+.app-shell .cmp-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .cmp-body { overflow: auto; display: grid; gap: 6px; padding: 8px 2px; min-height: 120px; }
+.app-shell .cmp-row { align-items: stretch; }
+.app-shell .cmp-cell p { margin: 0; padding: 8px 10px; border-radius: 8px; line-height: 1.5; font-size: 14px; white-space: pre-wrap; }
+.app-shell .cmp-same { color: var(--ink-quiet); }
+.app-shell .cmp-changed { background: color-mix(in srgb, #f5b301 14%, transparent); }
+.app-shell .cmp-del { background: color-mix(in srgb, #d92d20 12%, transparent); }
+.app-shell .cmp-ins { background: color-mix(in srgb, #12b76a 14%, transparent); }
+.app-shell .cmp-gap { color: var(--ink-quiet); text-align: center; background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.app-shell .cmp-changed del { background: color-mix(in srgb, #d92d20 28%, transparent); text-decoration: line-through; }
+.app-shell .cmp-changed ins { background: color-mix(in srgb, #12b76a 30%, transparent); text-decoration: none; }
+.app-shell .cmp-mid { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px; }
+.app-shell .cmp-mid button { display: grid; place-items: center; width: 28px; height: 24px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.app-shell .cmp-mid button:hover { border-color: var(--accent); color: var(--accent); }
+.app-shell .cmp-empty { color: var(--ink-quiet); text-align: center; }
+.app-shell .ais-ask { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; margin-left: auto; margin-right: 8px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+.app-shell .ais-ask:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.app-shell .ais-ask:disabled { opacity: .45; cursor: default; }
+
+.app-shell .tf-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.app-shell .tf-list li { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 10px; }
+.app-shell .tf-list li span { flex: 1; display: grid; min-width: 0; }
+.app-shell .tf-list li small { color: var(--ink-quiet); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .tf-list button { display: grid; place-items: center; width: 30px; height: 28px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.app-shell .tf-empty { color: var(--ink-quiet); margin: 0; }
+.app-shell .tf-result { margin: 0; display: grid; gap: 4px; }
+.app-shell .tf-result figcaption { font-size: 12.5px; color: var(--ink-quiet); }
+.app-shell .tf-result pre { margin: 0; padding: 10px 12px; max-height: 220px; overflow: auto; white-space: pre-wrap; border-radius: 10px; background: color-mix(in srgb, var(--ink) 5%, var(--surface)); font: inherit; font-size: 13.5px; line-height: 1.5; }
+
+.app-shell .split-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.app-shell .split-pick { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.app-shell .split-pick > span { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-quiet); }
+.app-shell .split-pick select { flex: 1; min-width: 0; max-width: none; font-weight: 600; }
+.app-shell .split-actions { display: inline-flex; gap: 6px; }
+
+/* ------------------------------------------------------------------ v4.2: the top bar has three zones — place (left), the note (middle), tools (right) */
+.app-shell .topbar { grid-template-columns: auto minmax(120px, 1fr) auto; gap: var(--space-3); }
+.app-shell .tb-nav { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.app-shell .tb-nav .brand-lockup { width: auto; margin: 0 var(--space-2) 0 var(--space-1); }
+.app-shell .topbar-note { display: flex; align-items: center; gap: var(--space-3); min-width: 0; padding-left: var(--space-3); border-left: 1px solid var(--line); }
+.app-shell .topbar-note .note-crumbs { flex: 1 1 auto; min-width: 0; }
+.app-shell .note-status { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-2); }
+.app-shell .topbar-actions { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.app-shell .tb-group { display: inline-flex; align-items: center; gap: 2px; }
+.app-shell .tb-sep { width: 1px; height: 20px; margin: 0 var(--space-2); background: var(--line-strong); opacity: .7; }
+.app-shell .topbar-actions .library-menu summary { height: 32px; padding: 0 var(--space-2); }
+@media (max-width: 1280px) { .app-shell .autoformat-button span { display: none; } .app-shell .autoformat-button { padding: 0 8px; } .app-shell .note-status .save-label span { display: none; } }
+@media (max-width: 1100px) { .app-shell .tb-nav .brand-lockup span:not(.brand-mark) { display: none; } .app-shell .tb-sep { margin: 0 4px; } }
+@media (max-width: 900px) {
+  .app-shell .topbar { height: auto; min-height: 48px; padding-block: var(--space-1); grid-template-columns: auto minmax(0, 1fr); }
+  .app-shell .topbar-note { grid-column: 1 / -1; grid-row: 2; padding-left: 0; border-left: 0; }
+  .app-shell .topbar-actions { grid-row: 1; grid-column: 2; justify-self: end; flex-wrap: wrap; }
+}
+
+/* ------------------------------------------------------------------ v4.3: designer audit — one canvas, readable tabs, a home page that shows the notes first */
+.editor-card { aspect-ratio: auto; min-height: max(420px, calc(100vh - 300px)); }
+.app-shell .tab-wrap { flex: 0 0 150px; min-width: 130px; max-width: 220px; }
+.app-shell .tab-list { flex: 0 0 auto; min-width: auto; }   /* the strip scrolls instead of squeezing tabs below a readable width; "+" sticks to the edge */
+
+.app-shell .empty-notes { flex: 1; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 40px 24px; text-align: center; color: var(--ink-soft); }
+.app-shell .empty-notes h2 { margin: 0; font-size: 18px; color: var(--ink); }
+.app-shell .empty-notes p { margin: 0; max-width: 420px; }
+.app-shell .empty-notes div { display: flex; gap: 8px; margin-top: 8px; }
+.app-shell .empty-notes button { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; cursor: pointer; }
+.app-shell .empty-notes .empty-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ------------------------------------------------------------------ v4.4: three expert critiques */
+.app-shell .topbar { position: relative; z-index: 5; }                                   /* menus open over the tab strip, its "+" never shows through */
+.app-shell .tabs-scroller { scroll-padding-inline-end: 48px; }                            /* the active tab is never scrolled under the sticky "+" */
+.app-shell .tabs-scroller .new-tab { z-index: 1; }
+.app-shell summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.app-shell .autoformat-button:disabled { opacity: .75; cursor: progress; }               /* "Оформляю…" is a running process, not an unavailable button */
+.app-shell .tab-close { width: 24px; height: 24px; }
+.app-shell .editor-card:focus-within { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent), 0 26px 60px rgba(20, 27, 38, 0.18); }
+.app-shell .sidebar { display: flex; flex-direction: column; min-height: 0; }
+.app-shell .notes-section { flex: 1 1 140px; min-height: 120px; display: flex; flex-direction: column; }
+.app-shell .notes-section .section-label { display: flex; align-items: center; justify-content: space-between; }
+.app-shell .notes-count { font-size: 12px; color: var(--ink-quiet); font-variant-numeric: tabular-nums; }
+.app-shell .notes-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1 1 auto; min-height: 0; scrollbar-width: thin; }
+.app-shell .notes-list button { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 var(--space-3); border: 0; border-radius: 7px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+.app-shell .notes-list button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .notes-list button svg { flex: 0 0 auto; color: var(--ink-quiet); }
+.app-shell .notes-list button:hover { background: var(--surface-hover); color: var(--ink); }
+.app-shell .notes-list button.is-current { background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; }
+.app-shell .notes-empty { padding: 6px var(--space-3); font-size: 13px; color: var(--ink-quiet); }
+
+/* tags: one folded line by default, compact chips when open */
+.app-shell .tags-section { flex: 0 0 auto; }
+.app-shell .tags-summary { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 var(--space-3); list-style: none; cursor: pointer; font-size: 13px; font-weight: 650; color: var(--ink-soft); border-radius: 7px; }
+.app-shell .tags-summary::-webkit-details-marker { display: none; }
+.app-shell .tags-summary > span:first-of-type { flex: 1; }
+.app-shell .tags-summary:hover { background: var(--surface-hover); }
+.app-shell .tags-chevron { transition: transform .15s; color: var(--ink-quiet); }
+.app-shell .tags-section[open] .tags-chevron { transform: rotate(180deg); }
+.app-shell .tags-section .tag-cloud { display: flex; flex-wrap: wrap; gap: 4px; max-height: 96px; overflow-y: auto; padding: 4px var(--space-2) 6px; scrollbar-width: thin; }
+.app-shell .tags-section .tag-chip { height: 22px; padding: 0 7px; gap: 3px; font-size: 12px; border-radius: 11px; }
+.app-shell .tags-section .tag-chip span { font-size: 11px; opacity: .7; }
+.app-shell .notes-clear { border: 0; background: transparent; color: var(--danger, #b3261e); font: inherit; font-size: 12px; cursor: pointer; padding: 0 4px; }
+.app-shell .notes-clear:hover { text-decoration: underline; }

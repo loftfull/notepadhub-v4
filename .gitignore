@@ -1,0 +1,19 @@
+# build output
+bin/
+obj/
+node_modules/
+ui/dist/
+*.user
+.vs/
+*.log
+# local data and test artifacts: never published
+*.zip
+*.nhub
+data-v3/
+tmp/
+.env
+.env.*
+*.dpapi
+ai-compat.json
+.autopilot/
+ui/artifacts/

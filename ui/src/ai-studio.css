@@ -1,0 +1,166 @@
+/*
+  AI-помощник — "studio" layout.
+  Order follows the user's thinking: what do I process (scope + privacy) → what should happen (actions) → result (review before apply) → free instruction (pinned composer).
+  Trust cues are always visible: where the model runs (dot + chip), what is sent (scope + preview), nothing changes without "Применить".
+*/
+.app-shell .ai-studio {
+  --ais-accent-a: #2f6fed;
+  --ais-accent-b: #7a5af8;
+  top: 48px;
+  bottom: 0;
+  right: 0;
+  width: var(--ai-w, 400px);
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: #f8f9fb;          /* the same tone as the note library on the left */
+  box-shadow: none;
+}
+.app-shell.theme-dark .ai-studio { background: #242528; border-left-color: #3a3b3f; }
+.app-shell .ai-resizer { position: fixed; z-index: 6; top: 48px; bottom: 0; right: calc(var(--ai-w, 400px) - 3px); width: 6px; cursor: col-resize; background: transparent; touch-action: none; }
+.app-shell .ai-resizer:hover, .app-shell .ai-resizer:focus-visible, .app-shell .ai-resizer:active { background: color-mix(in srgb, var(--accent) 35%, transparent); outline: none; }
+@media (max-width: 899px) {
+  .app-shell .ai-resizer { display: none; }
+  .app-shell .ai-studio { top: 56px; bottom: 0; left: 0; right: 0; width: auto; border-left: 0; }
+}
+
+/* header */
+.app-shell .ais-header { display: flex; align-items: center; gap: 12px; padding: 16px 14px 12px 18px; }
+.app-shell .ais-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; color: #fff; background: linear-gradient(135deg, var(--ais-accent-a), var(--ais-accent-b)); box-shadow: 0 4px 12px rgba(80, 90, 240, .35); flex: 0 0 auto; }
+.app-shell .ais-title { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.app-shell .ais-title strong { font-size: 15px; letter-spacing: -.01em; color: var(--ink); }
+.app-shell .ais-title span { font-size: 12px; color: var(--ink-quiet); }
+
+/* scrolling body + pinned composer */
+.app-shell .ais-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; padding: 4px 18px 18px; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+
+/* model chip */
+.app-shell .ais-model { border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-soft); }
+.app-shell .ais-model > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 12px; list-style: none; cursor: pointer; border-radius: 12px; }
+.app-shell .ais-model > summary::-webkit-details-marker { display: none; }
+.app-shell .ais-model > summary:hover { background: var(--surface-hover); }
+.app-shell .ais-model > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app-shell .ais-model[open] > summary svg:last-of-type { transform: rotate(180deg); }
+.app-shell .ais-model-text { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; line-height: 1.25; }
+.app-shell .ais-model-text b { font-size: 13px; color: var(--ink); }
+.app-shell .ais-model-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--ink-quiet); }
+.app-shell .ais-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.app-shell .ais-dot.is-local { background: #2e9d57; box-shadow: 0 0 0 3px rgba(46, 157, 87, .18); }
+.app-shell .ais-dot.is-cloud { background: #d98a00; box-shadow: 0 0 0 3px rgba(217, 138, 0, .2); }
+.app-shell .ais-model .ai-assistant-settings { display: flex; flex-direction: column; gap: 12px; padding: 4px 12px 14px; }
+.app-shell .ais-field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--ink-quiet); }
+.app-shell .ais-field input, .app-shell .ais-field select, .app-shell .ais-model input[type="password"] { height: 34px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; }
+.app-shell .ais-check { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--ink); }
+
+/* section labels, segmented control, privacy chip */
+.app-shell .ais-section { display: flex; flex-direction: column; gap: 10px; }
+.app-shell .ais-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 650; letter-spacing: .02em; color: var(--ink-quiet); }
+.app-shell .ais-privacy { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; letter-spacing: 0; }
+.app-shell .ais-privacy.is-local { color: #1d6b3b; background: rgba(46, 157, 87, .12); }
+.app-shell .ais-privacy.is-cloud { color: #8a5600; background: rgba(217, 138, 0, .15); }
+.app-shell.theme-dark .ais-privacy.is-local { color: #7fdca0; }
+.app-shell.theme-dark .ais-privacy.is-cloud { color: #f3c36b; }
+.app-shell .ais-seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 3px; border-radius: 10px; background: var(--surface-hover); }
+.app-shell .ais-seg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 12.5px; font-weight: 550; cursor: pointer; white-space: nowrap; }
+.app-shell .ais-seg button:hover { color: var(--ink); }
+.app-shell .ais-seg button.is-on { background: var(--surface); color: var(--ink); font-weight: 650; box-shadow: 0 1px 3px rgba(20, 24, 40, .16); }
+.app-shell .ais-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.app-shell .ais-context > summary { cursor: pointer; font-size: 12px; color: var(--ink-quiet); }
+.app-shell .ais-context pre { margin: 8px 0 0; max-height: 120px; overflow: auto; padding: 10px; border-radius: 8px; background: var(--surface-soft); border: 1px solid var(--line); white-space: pre-wrap; font: 12px/1.5 inherit; color: var(--ink-soft); }
+
+/* quick actions: tiles */
+.app-shell .ais-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.app-shell .ais-action { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; transition: border-color 120ms ease-out, background 120ms ease-out, transform 120ms ease-out; }
+.app-shell .ais-action svg { flex: 0 0 auto; color: var(--ais-accent-a); }
+.app-shell .ais-action:hover:not(:disabled) { border-color: var(--ais-accent-a); background: var(--accent-soft); transform: translateY(-1px); }
+.app-shell .ais-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app-shell .ais-action:disabled { opacity: .5; cursor: not-allowed; }
+.app-shell .ais-more { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--accent-strong); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+
+/* streaming + result */
+.app-shell .ais-live { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-soft); }
+.app-shell .ais-live pre { margin: 0; max-height: 220px; overflow: auto; white-space: pre-wrap; font: 13px/1.55 inherit; color: var(--ink); }
+.app-shell .ais-caret { display: inline-block; width: 7px; height: 14px; margin-left: 2px; vertical-align: -2px; border-radius: 2px; background: var(--ais-accent-b); animation: ais-blink 1s steps(2, start) infinite; }
+@keyframes ais-blink { to { visibility: hidden; } }
+.app-shell .ais-ghost { align-self: flex-start; height: 30px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 12.5px; cursor: pointer; }
+.app-shell .ais-proposal { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--ais-accent-a); border-radius: 14px; background: var(--surface); box-shadow: 0 0 0 3px var(--accent-soft); }
+.app-shell .ais-proposal > header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.app-shell .ais-proposal del { display: block; max-height: 96px; overflow: auto; padding: 8px 10px; border-radius: 8px; background: rgba(200, 60, 60, .08); color: var(--ink-quiet); font-size: 12.5px; }
+.app-shell .ais-proposal .ai-proposal-text { padding: 8px 10px; border-radius: 8px; background: rgba(46, 157, 87, .09); font-size: 13.5px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; }
+.app-shell .ais-proposal .ai-proposal-actions { display: flex; gap: 8px; }
+.app-shell .ais-proposal .ai-proposal-actions button { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.app-shell .ais-proposal .ai-proposal-actions .ai-accept { border-color: transparent; color: #fff; background: linear-gradient(135deg, var(--ais-accent-a), var(--ais-accent-b)); }
+.app-shell.theme-dark .ais-proposal .ai-proposal-actions .ai-accept { color: #0b1020; }
+
+.app-shell .ais-assets > summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
+
+/* pinned composer */
+.app-shell .ais-composer { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 12px 18px 16px; border-top: 1px solid var(--line); background: var(--surface); }
+.app-shell .ais-composer textarea { width: 100%; resize: none; min-height: 58px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-soft); color: var(--ink); font: inherit; font-size: 13px; line-height: 1.45; box-sizing: border-box; }
+.app-shell .ais-composer textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; background: var(--surface); }
+.app-shell .ais-composer-row { display: flex; align-items: center; justify-content: space-between; }
+.app-shell .ais-composer-row small { color: var(--ink-quiet); font-size: 11.5px; }
+.app-shell .ais-send { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; color: #fff; background: linear-gradient(135deg, var(--ais-accent-a), var(--ais-accent-b)); cursor: pointer; box-shadow: 0 4px 12px rgba(80, 90, 240, .3); }
+.app-shell .ais-send:disabled { opacity: .4; box-shadow: none; cursor: not-allowed; }
+.app-shell .ais-send:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+.app-shell.theme-dark .ais-send { color: #0b1020; }
+
+@media (max-width: 1199px) {
+  .app-shell .ais-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .ais-action, .app-shell .ais-model > summary svg { transition: none; }
+  .app-shell .ais-caret { animation: none; }
+}
+
+.app-shell .ais-seg-wrap { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.app-shell .ais-seg button:disabled { opacity: .45; cursor: not-allowed; }
+.app-shell .ais-linked-list { margin: 8px 0 0; font-size: 12px; color: var(--ink-quiet); }
+
+.app-shell .ais-usage { display: block; margin: 6px 0; font-size: 12px; color: var(--ink-quiet); }
+
+/* faithful-answer checks and the inline difference */
+.app-shell .ais-diff, .app-shell .ais-diff-plain { max-height: 260px; overflow: auto; padding: 10px 12px; border-radius: 10px; background: var(--surface-soft); border: 1px solid var(--line); font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; color: var(--ink); }
+.app-shell .ais-diff del, .app-shell .ais-diff-plain del { color: #a3271f; background: rgba(200, 60, 60, .12); text-decoration: line-through; border-radius: 3px; }
+.app-shell .ais-diff ins, .app-shell .ais-diff-plain ins { color: #1d6b3b; background: rgba(46, 157, 87, .16); text-decoration: none; border-radius: 3px; }
+.app-shell.theme-dark .ais-diff del, .app-shell.theme-dark .ais-diff-plain del { color: #ffb4ab; }
+.app-shell.theme-dark .ais-diff ins, .app-shell.theme-dark .ais-diff-plain ins { color: #7fdca0; }
+.app-shell .ais-diff-plain { display: flex; flex-direction: column; gap: 8px; }
+.app-shell .ais-checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.app-shell .ais-checks li { display: flex; gap: 8px; align-items: flex-start; color: var(--ink-soft); }
+.app-shell .ais-checks li span { flex: 0 0 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+.app-shell .ais-checks .is-ok span { color: #1d6b3b; background: rgba(46, 157, 87, .16); }
+.app-shell .ais-checks .is-warn span { color: #8a5600; background: rgba(217, 138, 0, .2); }
+.app-shell .ais-checks .is-error span { color: #a3271f; background: rgba(200, 60, 60, .16); }
+.app-shell .ais-checks .is-error { color: #a3271f; font-weight: 600; }
+.app-shell.theme-dark .ais-checks .is-error { color: #ffb4ab; }
+.app-shell .ais-truncated { margin: 0; padding: 8px 10px; border-radius: 8px; background: rgba(200, 60, 60, .12); color: #a3271f; font-size: 12.5px; font-weight: 600; }
+.app-shell.theme-dark .ais-truncated { color: #ffb4ab; }
+.app-shell .ais-cleaned { margin: 0; font-size: 12px; color: var(--ink-quiet); }
+
+/* chips instead of big tiles: compact, readable even when unavailable */
+.app-shell .ais-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.app-shell .ais-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; transition: background .12s, border-color .12s; }
+.app-shell .ais-chip svg { color: var(--ink-quiet); flex: 0 0 auto; }
+.app-shell .ais-chip:hover:not(:disabled) { background: var(--surface-hover); border-color: var(--accent); }
+.app-shell .ais-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app-shell .ais-chip:disabled { color: var(--ink-quiet); cursor: default; background: transparent; border-style: dashed; }
+.app-shell .ais-chip.is-insight { border-color: color-mix(in srgb, var(--accent) 30%, var(--line-strong)); }
+.app-shell .ais-why { margin: 0 0 8px; font-size: 12.5px; line-height: 1.45; color: var(--ink-quiet); }
+.app-shell .ais-label small { margin-left: auto; font-weight: 400; color: var(--ink-quiet); font-size: 12px; }
+.app-shell .ais-body { gap: 16px; padding: 4px 16px 16px; }
+.app-shell .ais-header { padding: 14px 12px 10px 16px; }
+
+/* scope: one row of four, model: a one-line chip, toast: over the sheet, not over the composer */
+.app-shell .ais-seg-wrap { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.app-shell .ais-seg-wrap button { padding: 0 4px; font-size: 12.5px; }
+.app-shell .ais-model > summary { min-height: 38px; padding: 4px 10px; }
+.app-shell .ais-model-text { flex-direction: row; align-items: baseline; gap: 8px; }
+.app-shell .ais-model-text b { flex: 0 0 auto; }
+.app-shell.ai-open .toast { right: calc(var(--ai-w, 400px) + 16px); }
+@media (max-width: 899px) { .app-shell.ai-open .toast { right: 18px; bottom: 80px; } }
+
+.app-shell .ais-send:disabled { opacity: 1; background: var(--surface-hover); color: var(--ink-muted); box-shadow: none; }

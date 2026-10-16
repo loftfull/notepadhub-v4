@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>NotepadHub4</AssemblyName>
+    <RootNamespace>NotepadHub.Host</RootNamespace>
+    <ApplicationIcon>NotepadHub.ico</ApplicationIcon>
+    <Version>4.0.0-preview.1</Version>
+    <SatelliteResourceLanguages>en;ru</SatelliteResourceLanguages>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NotepadHub.Core\NotepadHub.Core.csproj" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+  </ItemGroup>
+
+  <!-- The built web UI (ui/dist) ships next to the exe and is served from a virtual host name; nothing is fetched from the internet. -->
+  <ItemGroup>
+    <Content Include="..\..\ui\dist\**\*" Link="ui\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Resource Include="NotepadHub.ico" />
+  </ItemGroup>
+
+</Project>
