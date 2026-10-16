@@ -348,6 +348,10 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const [dense, setDense] = useState(() => { try { return window.localStorage.getItem("nh4-dense") === "1"; } catch { return false; } });
   useEffect(() => { try { window.localStorage.setItem("nh4-closed-projects", JSON.stringify(closedProjects)); window.localStorage.setItem("nh4-sub-notes", subNotes ? "1" : "0"); window.localStorage.setItem("nh4-dense", dense ? "1" : "0"); } catch { /* optional */ } }, [closedProjects, subNotes, dense]);
   const [focusMode, setFocusMode] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);          // several notes chosen in the list (Ctrl or Shift + click)
+  const [dragNotes, setDragNotes] = useState<string[]>([]);    // the notes being dragged to a project
+  const anchorRef = useRef<string | null>(null);
+  useEffect(() => { setPicked([]); }, [noteView, folder]);
   const [wrapLines, setWrapLines] = useState(() => { try { return window.localStorage.getItem("nh4-wrap") !== "0"; } catch { return true; } });
   const [editorFont, setEditorFont] = useState<"system" | "serif" | "mono">(() => { try { const v = window.localStorage.getItem("nh4-font"); return v === "serif" || v === "mono" ? v : "system"; } catch { return "system"; } });
   const [caret, setCaret] = useState<{ line: number; col: number; lines: number } | null>(null);
@@ -2347,6 +2351,46 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     for (const doc of docs) if (!doc.deletedAt) for (const tag of parseTags(tags[doc.id])) counts.set(tag, (counts.get(tag) ?? 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ru"));
   }, [docs, tags]);
+  const visibleIds = listGroups.filter((group) => !closedGroups.includes(group.name)).flatMap((group) => group.items.map((doc) => doc.id));
+  const pickNote = (doc: DocItem, event: React.MouseEvent) => {
+    if (event.shiftKey && anchorRef.current) {
+      const from = visibleIds.indexOf(anchorRef.current), to = visibleIds.indexOf(doc.id);
+      if (from >= 0 && to >= 0) { setPicked(visibleIds.slice(Math.min(from, to), Math.max(from, to) + 1)); return; }
+    }
+    if (event.ctrlKey || event.metaKey) {
+      anchorRef.current = doc.id;
+      setPicked((current) => { const base = current.length === 0 && activeId ? [activeId] : current; return base.includes(doc.id) ? base.filter((id) => id !== doc.id) : [...base, doc.id]; });
+      return;
+    }
+    anchorRef.current = doc.id;
+    setPicked([]);
+    selectDocument(doc);
+  };
+  const moveNotesTo = (ids: string[], target: string) => {
+    const moving = docsRef.current.filter((doc) => ids.includes(doc.id) && !doc.deletedAt && doc.folder !== target);
+    if (moving.length === 0) return;
+    const movingIds = new Set(moving.map((doc) => doc.id));
+    setDocs((current) => current.map((doc) => movingIds.has(doc.id) ? { ...doc, folder: target, archived: false } : doc));
+    setPicked([]);
+    setNotice(moving.length === 1 ? `Заметка «${moving[0].title}» перемещена в «${target}»` : `Заметок перемещено в «${target}»: ${moving.length}`);
+  };
+  const archiveNotes = (ids: string[]) => {
+    const set = new Set(ids);
+    setDocs((current) => current.map((doc) => set.has(doc.id) ? { ...doc, archived: true } : doc));
+    setPicked([]);
+    setNotice(`Заметок перемещено в архив: ${ids.length}`);
+  };
+  const trashNotes = (ids: string[]) => {
+    setConfirmDialog({ title: "Переместить в корзину?", message: `Выбрано заметок: ${ids.length}. Они уйдут в корзину, вернуть их можно в течение 30 дней.`, confirm: "В корзину", danger: true, run: () => {
+      const set = new Set(ids);
+      const stamp = new Date().toISOString();
+      setDocs((current) => current.map((doc) => set.has(doc.id) ? { ...doc, deletedAt: stamp } : doc));
+      if (activeIdRef.current && set.has(activeIdRef.current)) { activeIdRef.current = null; setActiveId(null); editor.replaceBlocks(editor.document, [{ type: "paragraph", content: "" }]); }
+      setPicked([]);
+      setNotice(`Заметок перемещено в корзину: ${ids.length}`);
+      setToastAction({ label: "Отменить", run: () => setDocs((current) => current.map((doc) => set.has(doc.id) ? { ...doc, deletedAt: undefined } : doc)) });
+    } });
+  };
   const toggleCompare = () => {
     if (secondId) { setSecondId(null); return; }
     const other = [...openTabs.filter((doc) => doc.id !== activeId), ...docs.filter((doc) => !doc.deletedAt && doc.id !== activeId)].find((doc) => !isPlaceholderNote(doc.id));
@@ -2429,8 +2473,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
           <div className="sidebar-toolbar"><h2 className="sidebar-caption" id="projects-heading">Проекты</h2><button className="icon-button tiny sidebar-add" aria-label="Добавить проект" title="Добавить проект" onClick={() => addFolder()}><Plus size={16} /></button></div>
           <div className="sidebar-body">
           <section className={`nav-section projects-section${dragProject ? " is-dragging" : ""}${dropTarget === "" ? " is-drop-root" : ""}`} aria-labelledby="projects-heading"
-            onDragOver={(event) => { if (dragProject) { event.preventDefault(); setDropTarget(""); } }}
-            onDrop={(event) => { if (dragProject) { event.preventDefault(); moveProjectTo(dragProject, ""); setDragProject(null); setDropTarget(null); } }}>
+            onDragOver={(event) => { if (dragProject && dragNotes.length === 0) { event.preventDefault(); setDropTarget(""); } }}
+            onDrop={(event) => { if (dragProject && dragNotes.length === 0) { event.preventDefault(); moveProjectTo(dragProject, ""); setDragProject(null); setDropTarget(null); } }}>
             <div className="folder-item"><span className="folder-fold-gap" aria-hidden="true" /><button className={`folder-row all-row${noteView === "all" ? " selected" : ""}`} aria-current={noteView === "all" ? "page" : undefined} onClick={() => switchToSpecialView("all")}><FileText size={16} className="folder-icon" /><span>Все заметки</span><span className="folder-count">{docs.filter((doc) => !doc.deletedAt && !doc.archived).length}</span></button></div>
             {projectRows(folders, parents, closedProjects).map(({ name, depth, hasChildren }) => {
               const system = SYSTEM_PROJECTS.includes(name);
@@ -2441,8 +2485,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
                 draggable={!system}
                 onDragStart={(event) => { if (system) return; event.dataTransfer.setData("text/plain", name); event.dataTransfer.effectAllowed = "move"; setDragProject(name); }}
                 onDragEnd={() => { setDragProject(null); setDropTarget(null); }}
-                onDragOver={(event) => { if (dragProject && !system && dragProject !== name) { event.preventDefault(); event.stopPropagation(); setDropTarget(name); } }}
-                onDrop={(event) => { if (dragProject && !system) { event.preventDefault(); event.stopPropagation(); moveProjectTo(dragProject, name); setDragProject(null); setDropTarget(null); } }}>
+                onDragOver={(event) => { if (dragNotes.length > 0 || (dragProject && !system && dragProject !== name)) { event.preventDefault(); event.stopPropagation(); setDropTarget(name); } }}
+                onDrop={(event) => { if (dragNotes.length > 0) { event.preventDefault(); event.stopPropagation(); moveNotesTo(dragNotes, name); setDragNotes([]); setDropTarget(null); return; } if (dragProject && !system) { event.preventDefault(); event.stopPropagation(); moveProjectTo(dragProject, name); setDragProject(null); setDropTarget(null); } }}>
                 {hasChildren
                   ? <button type="button" className="folder-fold" aria-label={open ? `Свернуть проект «${name}»` : `Развернуть проект «${name}»`} aria-expanded={open} onClick={() => setClosedProjects((current) => current.includes(name) ? current.filter((x) => x !== name) : [...current, name])}><ChevronRight size={13} className={open ? "is-open" : undefined} aria-hidden="true" /></button>
                   : <span className="folder-fold-gap" aria-hidden="true" />}
@@ -2453,10 +2497,17 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
           </section>
           <section className="nav-section notes-section" aria-label="Заметки раздела">
             <div className="section-label"><h2>{noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : noteView === "pinned" ? "Избранное" : noteView === "recent" ? "Недавние" : noteView === "all" ? "Все заметки" : "Заметки"}</h2><span className="notes-tools">{dayFilter !== null && <button type="button" className="day-chip" title="Показать все заметки проекта" onClick={() => setDayFilter(null)}>{new Date(dayFilter).getDate()} {MONTHS_GEN[new Date(dayFilter).getMonth()]} <X size={11} aria-hidden="true" /></button>}{listGroups.some((g) => g.name) && <button type="button" className="icon-button tiny" aria-label="Свернуть или развернуть все группы" title="Свернуть или развернуть все группы" onClick={() => setClosedGroups((current) => current.length > 0 ? [] : listGroups.map((g) => g.name).filter(Boolean))}><ChevronsUpDown size={14} /></button>}<button type="button" className={`icon-button tiny${dayFilter !== null || calendarOpen ? " is-on" : ""}`} aria-label="Календарь: заметки по дням" aria-expanded={calendarOpen} title="Календарь: заметки по дням" onClick={() => setCalendarOpen((open) => !open)}><CalendarDays size={14} /></button><button type="button" className="icon-button tiny" aria-label={notesSort === "modified" ? "Сортировка: по изменению. Нажмите, чтобы сортировать по названию" : "Сортировка: по названию. Нажмите, чтобы сортировать по изменению"} title={notesSort === "modified" ? "Сначала изменённые: нажмите для сортировки по названию" : "По названию: нажмите для сортировки по изменению"} onClick={() => { const next = notesSort === "modified" ? "title" : "modified"; setNotesSort(next); try { window.localStorage.setItem("nh4-notes-sort", next); } catch { /* optional */ } }}><ArrowUpDown size={14} /></button><button type="button" className={`icon-button tiny${notesPreview ? " is-on" : ""}`} aria-pressed={notesPreview} aria-label="Показывать начало текста под названием" title="Начало текста под названием" onClick={() => { const next = !notesPreview; setNotesPreview(next); try { window.localStorage.setItem("nh4-notes-preview", next ? "1" : "0"); } catch { /* optional */ } }}><AlignLeft size={14} /></button><span className="notes-count">{filteredDocs.length}</span></span></div>
+            {picked.length > 1 && <div className="bulk-bar" role="toolbar" aria-label="Действия над выбранными заметками">
+              <strong>Выбрано: {picked.length}</strong>
+              <select aria-label="Переместить выбранные в проект" value="" onChange={(event) => { if (event.target.value) moveNotesTo(picked, event.target.value); }}><option value="">Переместить в…</option>{folders.map((name) => <option key={name} value={name}>{name}</option>)}</select>
+              <button type="button" onClick={() => archiveNotes(picked)}><Archive size={13} aria-hidden="true" />В архив</button>
+              <button type="button" className="is-danger" onClick={() => trashNotes(picked)}><Trash2 size={13} aria-hidden="true" />В корзину</button>
+              <button type="button" aria-label="Снять выбор" title="Снять выбор" onClick={() => setPicked([])}><X size={13} aria-hidden="true" /></button>
+            </div>}
             <ul className="notes-list">
               {listGroups.map((group) => <Fragment key={group.name || "all"}>
                 {group.name && <li className="notes-group"><button type="button" aria-expanded={!closedGroups.includes(group.name)} onClick={() => setClosedGroups((current) => current.includes(group.name) ? current.filter((x) => x !== group.name) : [...current, group.name])}><ChevronDown size={13} className="notes-group-chevron" aria-hidden="true" />{group.name}<small>{group.items.length}</small></button></li>}
-                {!closedGroups.includes(group.name) && group.items.map((doc) => <li key={doc.id}><button className={doc.id === activeId ? "is-current" : undefined} aria-current={doc.id === activeId ? "true" : undefined} title={doc.title} onClick={() => selectDocument(doc)}><FileText size={14} aria-hidden="true" /><span className="note-line"><span className="note-name">{doc.title}</span>{notesPreview && snippetOf(doc) && <small className="note-snippet">{snippetOf(doc)}</small>}</span></button></li>)}
+                {!closedGroups.includes(group.name) && group.items.map((doc) => <li key={doc.id}><button className={`${doc.id === activeId ? "is-current" : ""}${picked.includes(doc.id) ? " is-picked" : ""}`.trim() || undefined} aria-current={doc.id === activeId ? "true" : undefined} aria-selected={picked.includes(doc.id) || undefined} title={doc.title} draggable={!doc.deletedAt} onDragStart={(event) => { const ids = picked.includes(doc.id) ? picked : [doc.id]; event.dataTransfer.setData("text/plain", ids.join(",")); event.dataTransfer.effectAllowed = "move"; setDragNotes(ids); }} onDragEnd={() => { setDragNotes([]); setDropTarget(null); }} onClick={(event) => pickNote(doc, event)}><FileText size={14} aria-hidden="true" /><span className="note-line"><span className="note-name">{doc.title}</span>{notesPreview && snippetOf(doc) && <small className="note-snippet">{snippetOf(doc)}</small>}</span></button></li>)}
               </Fragment>)}
               {filteredDocs.length === 0 && <li className="notes-empty">В этом разделе нет заметок</li>}
             </ul>

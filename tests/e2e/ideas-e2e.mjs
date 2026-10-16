@@ -156,7 +156,7 @@ try {
   await sleep(500);
   check("dragging a project onto another nests it", (await page.locator(".folder-item[data-depth='1']", { hasText: "Клиенты" }).count()) === 1);
   await page.locator(".folder-item", { hasText: "Работа" }).first().dragTo(page.locator(".folder-item", { hasText: "Клиенты" }).first());
-  await sleep(400);
+  await page.locator(".toast", { hasText: "нельзя вложить" }).waitFor({ timeout: 4000 }).catch(() => {});
   check("a project cannot be nested inside its own nested project", (await page.locator(".folder-item[data-depth='0']", { hasText: "Работа" }).count()) === 1 && /нельзя вложить/.test(await page.locator(".toast").first().innerText().catch(() => "")));
   if (process.env.NH_SHOT) await page.screenshot({ path: process.env.NH_SHOT });
   const findFile = (dir, name) => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const f = path.join(dir, e.name); if (e.isDirectory()) { const r = findFile(f, name); if (r) return r; } else if (e.name === name) return f; } return null; };
@@ -253,6 +253,30 @@ try {
   await page.getByRole("menuitemcheckbox", { name: /Перенос по словам/ }).click();
   await page.locator("summary[aria-label='Настройки приложения']").click();
   await page.getByRole("menuitemradio", { name: /Шрифт: обычный/ }).click();
+
+  // ---- several notes at once, and dragging a note to a project
+  await page.locator(".all-row").click();
+  await sleep(400);
+  const countNow = async (name) => Number((await page.locator(".folder-item", { hasText: name }).first().locator(".folder-count").innerText()).trim());
+  const workBefore = await countNow("Работа");
+  const row = (name) => page.locator(".notes-list li:not(.notes-group) button", { hasText: name }).first();
+  await row("Третья").click();
+  await row("Ссылающаяся").click({ modifiers: ["Control"] });
+  await sleep(300);
+  check("Ctrl + click picks several notes and shows the bulk bar", (await page.locator(".bulk-bar strong").innerText()).includes("Выбрано: 2"), await page.locator(".bulk-bar strong").innerText().catch(() => "none"));
+  await page.getByLabel("Переместить выбранные в проект").selectOption("Работа");
+  await sleep(500);
+  check("the picked notes move to the chosen project", (await countNow("Работа")) === workBefore + 2 && (await page.locator(".bulk-bar").count()) === 0, `${workBefore} -> ${await countNow("Работа")}`);
+  const inboxBefore = await countNow("Входящие");
+  await row("Цель").dragTo(page.locator(".folder-item", { hasText: "Входящие" }).first());
+  await sleep(500);
+  check("dragging a note onto a project moves it there", (await countNow("Входящие")) === inboxBefore + 1, `${inboxBefore} -> ${await countNow("Входящие")}`);
+  await row("Третья").click();
+  await row("Ссылающаяся").click({ modifiers: ["Shift"] });
+  await sleep(300);
+  check("Shift + click picks a range", /Выбрано: \d+/.test(await page.locator(".bulk-bar strong").innerText().catch(() => "")));
+  await page.getByRole("button", { name: "Снять выбор" }).click();
+  check("the bulk bar closes", (await page.locator(".bulk-bar").count()) === 0);
 } catch (e) {
   check("scenario completed without exceptions", false, String(e.message ?? e).split("\n").slice(0, 5).join(" | "));
 } finally {

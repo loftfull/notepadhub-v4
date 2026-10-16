@@ -828,3 +828,12 @@
 .app-shell .sidebar-collapse { width: 34px; flex-basis: 34px; padding: 0; }
 .app-shell .sidebar-footer > .settings-menu { margin-top: 0; }
 .app-shell .sidebar-footer { align-items: center; }
+
+/* v4.12 several notes picked, dragging notes to a project */
+.app-shell .notes-list button.is-picked { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.app-shell .bulk-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin: 2px 4px 6px; padding: 6px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); font-size: 12.5px; }
+.app-shell .bulk-bar strong { flex: 1 1 100%; font-weight: 600; color: var(--ink); }
+.app-shell .bulk-bar select, .app-shell .bulk-bar button { height: 26px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink-soft); font: inherit; font-size: 12.5px; padding: 0 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.app-shell .bulk-bar select { flex: 1 1 100%; }
+.app-shell .bulk-bar button:hover, .app-shell .bulk-bar select:hover { background: var(--surface-hover); color: var(--ink); }
+.app-shell .bulk-bar .is-danger { color: var(--danger, #b3261e); }
