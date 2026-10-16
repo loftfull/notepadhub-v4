@@ -10,8 +10,9 @@ namespace NotepadHub.Core;
 /// <item>the address is judged on the socket that is actually connected to, so a name that resolves (or later
 /// re-resolves — DNS rebinding) to a private, loopback, link-local or metadata address is refused even though
 /// the name itself looked public;</item>
-/// <item>proxy is disabled: a proxy would resolve names itself and the pinning below could not judge the real
-/// destination (the picture fetcher already worked this way);</item>
+/// <item>proxy is disabled by default: a proxy would resolve names itself and the pinning below could not judge
+/// the real destination (the picture fetcher already worked this way). Users behind a corporate proxy can opt in
+/// with <c>NOTEPADHUB_USE_PROXY=1</c> — see <see cref="SystemProxyRequested"/>;</item>
 /// <item>cookies are disabled: the app never needs them and they could carry identity between services.</item>
 /// </list>
 /// Local servers (Ollama, LM Studio, vLLM on 127.0.0.1) are called through a different client that this guard
@@ -68,19 +69,27 @@ public static class NetworkGuard
         };
     }
 
+    /// <summary>
+    /// Opt-in for users whose only route to the internet is a corporate proxy: with
+    /// <c>NOTEPADHUB_USE_PROXY=1</c> the system proxy is used for remote AI and picture downloads.
+    /// This is a trust decision: behind a proxy the guard below sees the proxy's address (usually private)
+    /// and the real destination is resolved inside the proxy, so the per-IP pinning is disabled in that mode.
+    /// </summary>
+    public static bool SystemProxyRequested => Environment.GetEnvironmentVariable("NOTEPADHUB_USE_PROXY") == "1";
+
     /// <summary>A handler for calls to the internet: pinned to public addresses, no proxy, no cookies.</summary>
-    public static SocketsHttpHandler CreatePublicOnlyHandler() => new()
+    public static SocketsHttpHandler CreatePublicOnlyHandler(bool allowSystemProxy = false) => new()
     {
         UseCookies = false,
-        UseProxy = false,
+        UseProxy = allowSystemProxy,
         ConnectTimeout = TimeSpan.FromSeconds(8),
-        ConnectCallback = PublicOnlyConnectCallback(),
+        ConnectCallback = allowSystemProxy ? null : PublicOnlyConnectCallback(),
     };
 
     /// <summary>An <see cref="HttpClient"/> for calls to the internet with the public-address guard on every connection.</summary>
-    public static HttpClient CreatePublicOnlyHttpClient(TimeSpan timeout, string userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) NotepadHub4")
+    public static HttpClient CreatePublicOnlyHttpClient(TimeSpan timeout, string userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) NotepadHub4", bool allowSystemProxy = false)
     {
-        var http = new HttpClient(CreatePublicOnlyHandler(), disposeHandler: true) { Timeout = timeout };
+        var http = new HttpClient(CreatePublicOnlyHandler(allowSystemProxy), disposeHandler: true) { Timeout = timeout };
         http.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
         return http;
     }

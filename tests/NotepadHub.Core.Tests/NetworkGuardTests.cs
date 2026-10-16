@@ -138,4 +138,48 @@ public class NetworkGuardTests
         Assert.Contains(remote.Calls, c => c.Contains("openrouter.ai/api/v1/chat/completions"));
         Assert.Empty(local.Calls);
     }
+
+    [Fact]
+    public void The_guarded_handler_pins_public_addresses_and_ignores_the_system_proxy_by_default()
+    {
+        using var h = NetworkGuard.CreatePublicOnlyHandler();
+        Assert.False(h.UseProxy);
+        Assert.NotNull(h.ConnectCallback);
+        Assert.False(h.UseCookies);
+    }
+
+    [Fact]
+    public void The_opt_in_proxy_mode_uses_the_system_proxy_and_disables_the_ip_pinning()
+    {
+        // documented trade-off: behind a proxy the real destination is resolved inside the proxy,
+        // so per-IP pinning cannot work and is turned off together with UseProxy=true
+        using var h = NetworkGuard.CreatePublicOnlyHandler(allowSystemProxy: true);
+        Assert.True(h.UseProxy);
+        Assert.Null(h.ConnectCallback);
+    }
+
+    [Fact]
+    public void The_proxy_opt_in_comes_from_the_environment_and_defaults_to_off()
+    {
+        var previous = Environment.GetEnvironmentVariable("NOTEPADHUB_USE_PROXY");
+        try
+        {
+            Environment.SetEnvironmentVariable("NOTEPADHUB_USE_PROXY", null);
+            Assert.False(NetworkGuard.SystemProxyRequested);
+            Environment.SetEnvironmentVariable("NOTEPADHUB_USE_PROXY", "0");
+            Assert.False(NetworkGuard.SystemProxyRequested);
+            Environment.SetEnvironmentVariable("NOTEPADHUB_USE_PROXY", "1");
+            Assert.True(NetworkGuard.SystemProxyRequested);
+        }
+        finally { Environment.SetEnvironmentVariable("NOTEPADHUB_USE_PROXY", previous); }
+    }
+
+    [Fact]
+    public void The_image_fetcher_accepts_the_proxy_opt_in()
+    {
+        using var direct = new ImageFetcher(allowLocal: true);
+        using var proxied = new ImageFetcher(allowLocal: true, allowSystemProxy: true);
+        Assert.NotNull(direct);
+        Assert.NotNull(proxied);
+    }
 }

@@ -689,6 +689,25 @@ export default defineConfig(({ mode }) => {
   const openRouterApiKey = process.env.OPENROUTER_API_KEY || env.OPENROUTER_API_KEY || "";
   return {
     plugins: [react(), localAiPlugin(openRouterApiKey), contentSecurityPolicy()],
+    build: {
+      // a desktop app serves its assets from disk: the editor chunk is intentionally one big
+      // cohesive unit (BlockNote + ProseMirror + Mantine), so the 500 kB web warning is noise here
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          // The single 1.5 MB bundle is split by dependency: WebView2 parses and caches the chunks
+          // independently, and an app update only invalidates the chunks that actually changed.
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return undefined;
+            // the editor stack stays together: BlockNote, its ProseMirror/Tiptap core and Mantine widgets
+            if (/[\\/]node_modules[\\/](@blocknote|@tiptap|@mantine|@floating-ui|prosemirror-|linkifyjs|orderedmap|rope-sequence|w3c-keyname|shikie|hast-util-|unist-util-|mdast-util-|remark-|micromark)/.test(id)) return "editor";
+            if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return "react";
+            if (/[\\/]node_modules[\\/]lucide-react[\\/]/.test(id)) return "icons";
+            return "vendor";
+          },
+        },
+      },
+    },
     server: {
       host: "127.0.0.1",
       strictPort: true,

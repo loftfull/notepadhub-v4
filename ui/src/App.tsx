@@ -1833,6 +1833,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   }, [aiProposal, editor]);
 
   const reloadLibrary = useCallback(async (opts?: { selectId?: string; selectFolder?: string }) => {
+    // D-20: the edits of the last 350 ms are still in the debounce queue; a reload would overwrite them with what is on disk. Push the current state first.
+    sync.push({ docs: docsRef.current, contents: contentsRef.current, activeId: activeIdRef.current, folder, folders, parents, dark, tags });
     await sync.flush();
     const loaded = toLabState(await host.bootstrap());
     sync.reset(loaded);
@@ -1858,7 +1860,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
       editor.replaceBlocks(editor.document, [{ type: "paragraph", content: "Создайте заметку кнопкой «Новая заметка»." }]);
     }
     return loaded;
-  }, [editor, sync]);
+  }, [editor, sync, folder, folders, parents, dark, tags]);
 
   useEffect(() => onHostEvent("libraryChanged", (payload) => {
     const select = (payload as { select?: string } | null)?.select;

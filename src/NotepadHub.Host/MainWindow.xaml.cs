@@ -31,13 +31,7 @@ public partial class MainWindow : Window
     private bool _webReady;
 
     /// <summary>Native confirmation before text goes to a cloud model. The first free request per model and every paid request ask.</summary>
-#if DEBUG
-    // Debug builds only (tests with real cloud models): NOTEPADHUB_TEST_AUTOCONFIRM=1 answers the native question with "yes". Release builds always ask.
-    private static readonly bool AutoConfirm = Environment.GetEnvironmentVariable("NOTEPADHUB_TEST_AUTOCONFIRM") == "1";
-#else
-    private const bool AutoConfirm = false;
-#endif
-    private Task<bool> ConfirmCloudSend(CloudSendInfo info) => AutoConfirm ? Task.FromResult(true) : Dispatcher.InvokeAsync(() =>
+    private Task<bool> ConfirmCloudSend(CloudSendInfo info) => Dispatcher.InvokeAsync(() =>
         MessageBox.Show(this,
             (info.PriceUnknown
                 ? $"Отправить текст во внешний сервис «{info.Service}»?\n\nМодель: {info.Model}\nЦена и условия тарифа неизвестны приложению: проверьте их на сайте сервиса. Бесплатные тарифы часто используют присланные тексты для обучения моделей.\n"
@@ -53,12 +47,14 @@ public partial class MainWindow : Window
         _store = store; _paths = paths;
         AiService? ai = null;
         // two clients: a plain one for servers on this computer (Ollama, LM Studio), and a guarded one for the internet
-        // (OpenRouter, a non-local OpenAI-compatible service): every connection is pinned to public addresses, no proxy, no cookies
-        try { ai = new AiService(new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, new DpapiSecretStore(paths.Root), m => HostLog.Write(m), null, new FileAiUsageStore(paths.Root, m => HostLog.Write(m)), null, ConfirmCloudSend, new CompatServiceStore(paths.Root), NetworkGuard.CreatePublicOnlyHttpClient(Timeout.InfiniteTimeSpan)); }
+        // (OpenRouter, a non-local OpenAI-compatible service): every connection is pinned to public addresses, no proxy, no cookies.
+        // NOTEPADHUB_USE_PROXY=1 opts into the system proxy (corporate networks); the pinning is then off — see NetworkGuard.
+        var useSystemProxy = NetworkGuard.SystemProxyRequested;
+        try { ai = new AiService(new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, new DpapiSecretStore(paths.Root), m => HostLog.Write(m), null, new FileAiUsageStore(paths.Root, m => HostLog.Write(m)), null, ConfirmCloudSend, new CompatServiceStore(paths.Root), NetworkGuard.CreatePublicOnlyHttpClient(Timeout.InfiniteTimeSpan, allowSystemProxy: useSystemProxy)); }
         catch (Exception ex)
         {
             HostLog.Write("ai: OLLAMA_HOST rejected (" + ex.Message + "); using the local default");
-            try { ai = new AiService(new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, new DpapiSecretStore(paths.Root), m => HostLog.Write(m), new Uri("http://127.0.0.1:11434"), new FileAiUsageStore(paths.Root, m => HostLog.Write(m)), null, ConfirmCloudSend, new CompatServiceStore(paths.Root), NetworkGuard.CreatePublicOnlyHttpClient(Timeout.InfiniteTimeSpan)); } catch { }
+            try { ai = new AiService(new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, new DpapiSecretStore(paths.Root), m => HostLog.Write(m), new Uri("http://127.0.0.1:11434"), new FileAiUsageStore(paths.Root, m => HostLog.Write(m)), null, ConfirmCloudSend, new CompatServiceStore(paths.Root), NetworkGuard.CreatePublicOnlyHttpClient(Timeout.InfiniteTimeSpan, allowSystemProxy: useSystemProxy)); } catch { }
         }
         _bridge = new BridgeDispatcher(store, new HostUi(this), App.Version, ai, Raise);
         RestoreGeometry();

@@ -16,16 +16,18 @@ public sealed class ImageFetcher : IDisposable
     private readonly bool _allowLocal;
 
     /// <param name="allowLocal">Tests only: let the picture come from this computer.</param>
-    public ImageFetcher(bool allowLocal = false)
+    /// <param name="allowSystemProxy">Opt-in corporate-proxy mode: the system proxy is used and the per-IP
+    /// pinning is disabled (the proxy resolves the real destination itself) — see <see cref="NetworkGuard.SystemProxyRequested"/>.</param>
+    public ImageFetcher(bool allowLocal = false, bool allowSystemProxy = false)
     {
         _allowLocal = allowLocal;
         var handler = new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
             UseCookies = false,
-            UseProxy = false,
+            UseProxy = allowSystemProxy,
             ConnectTimeout = TimeSpan.FromSeconds(8),
-            ConnectCallback = async (context, ct) =>
+            ConnectCallback = allowSystemProxy ? null : async (context, ct) =>
             {
                 var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, ct);
                 var allowed = addresses.Where(a => _allowLocal || NetworkGuard.IsPublicAddress(a)).ToArray();

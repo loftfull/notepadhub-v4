@@ -584,10 +584,56 @@ public sealed class NoteStore : IDisposable
             var files = new DirectoryInfo(dir).GetFiles("*.txt").OrderByDescending(f => f.LastWriteTimeUtc).ToList();
             if (!force && files.Count > 0 && DateTime.UtcNow - files[0].LastWriteTimeUtc < HistoryInterval) return;
             JsonIO.WriteAllTextAtomic(Path.Combine(dir, DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture) + ".txt"), content);
-            foreach (var old in files.Skip(HistoryKeep - 1)) TryDelete(old.FullName);
+            var all = new DirectoryInfo(dir).GetFiles("*.txt")
+                .Select(f => new HistoryFileInfo(f.FullName, f.Length, f.LastWriteTimeUtc))
+                .OrderByDescending(f => f.LastWriteTimeUtc).ToList();
+            foreach (var old in HistoryFilesToDelete(all, DateTime.UtcNow)) TryDelete(old);
         }
         catch (Exception ex) { Log("history save: " + ex.Message); }
     }
+
+    /// <summary>One history snapshot as the retention policy sees it (plain data so the policy is testable without files).</summary>
+    public readonly record struct HistoryFileInfo(string FullName, long Bytes, DateTime LastWriteTimeUtc);
+
+    /// <summary>Absolute caps for the tiered retention below; the newest <see cref="HistoryKeep"/> snapshots are always kept.</summary>
+    public const int HistoryMaxTotal = 200;
+    public const long HistoryMaxBytes = 16L * 1024 * 1024;
+
+    /// <summary>
+    /// Tiered retention for note history, newest first. The old rule deleted everything past the
+    /// 50th copy, so a month-old note kept at most one editing session. Now the newest 50 are always
+    /// kept, and older snapshots are thinned out instead of dropped: one per day up to 30 days,
+    /// one per week up to a year, one per month beyond that — bounded by <see cref="HistoryMaxTotal"/>
+    /// files and <see cref="HistoryMaxBytes"/> bytes (caps apply past the newest 50).
+    /// </summary>
+    public static IReadOnlyList<string> HistoryFilesToDelete(IReadOnlyList<HistoryFileInfo> newestFirst, DateTime utcNow)
+    {
+        var delete = new List<string>();
+        var kept = 0;
+        long bytes = 0;
+        DateTime lastDay = DateTime.MaxValue, lastWeek = DateTime.MaxValue, lastMonth = DateTime.MaxValue;
+        foreach (var f in newestFirst)
+        {
+            var stamp = f.LastWriteTimeUtc;
+            var age = utcNow - stamp;
+            bool keep;
+            if (kept < HistoryKeep) keep = true;
+            else if (kept >= HistoryMaxTotal) keep = false;
+            else if (age <= TimeSpan.FromDays(30)) keep = stamp.Date != lastDay;
+            else if (age <= TimeSpan.FromDays(365)) keep = WeekStart(stamp) != lastWeek;
+            else keep = new DateTime(stamp.Year, stamp.Month, 1, 0, 0, 0, DateTimeKind.Utc) != lastMonth;
+            if (keep && kept >= HistoryKeep && bytes + f.Bytes > HistoryMaxBytes) keep = false;
+            if (!keep) { delete.Add(f.FullName); continue; }
+            kept++;
+            bytes += f.Bytes;
+            lastDay = stamp.Date;
+            lastWeek = WeekStart(stamp);
+            lastMonth = new DateTime(stamp.Year, stamp.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        }
+        return delete;
+    }
+
+    private static DateTime WeekStart(DateTime d) => d.Date.AddDays(-(((int)d.DayOfWeek + 6) % 7));
 
     /// <summary>Explicit checkpoint, for example just before an AI proposal replaces text.</summary>
     public void Checkpoint(string id) { var n = FindMeta(id); if (n != null && !IsExternalOnly(n)) SnapshotHistory(id, ReadContent(id), force: true); }
