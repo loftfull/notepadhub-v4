@@ -16,7 +16,7 @@ import type { PartialBlock } from "@blocknote/core";
 import {
   AlignLeft, Archive, CalendarDays, ChevronsUpDown, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpDown, ExternalLink, Link2, Replace, ChevronLeft, ChevronRight, CircleAlert, Minus, Settings, Star, Check, ChevronDown, Clock3, Command, Copy, Download, FileText,
   Folder, FolderInput, FolderOpen, Hash, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Columns2, ImagePlus, LoaderCircle, Redo2, Tag, Wand2, RotateCcw, Search, Undo2,
-  Sparkles, Sun, Trash2, X, Eye, Pin, PinOff, List, Ellipsis, Info, FolderPlus,
+  Sparkles, Sun, Trash2, X, Eye, Pin, PinOff, List, Ellipsis, Info, FolderPlus, Printer, CalendarClock, ListOrdered, Type, WrapText,
 } from "lucide-react";
 import { getAiModels, getAiProviders, streamAiTask, type HiddenModel, type AiCitation, type AiModelOption, type AiOperation, type AiProposal, type AiProvider, type AiProviderStatus, type AiScope } from "./ai";
 import { AiAssistantPanel } from "./components/AiAssistantPanel";
@@ -38,7 +38,7 @@ import { blocksToText, textToBlocks, type LooseBlock } from "./textFormat";
 const AI_EDIT_MAX_OUTPUT_TOKENS = 512;
 const AI_ANALYSIS_MAX_OUTPUT_TOKENS = 1536;
 
-type FormDialog = { kind: "folder" | "move" | "tag" | "rename"; title: string; value: string; hint: string; parent?: string } | null;
+type FormDialog = { kind: "folder" | "move" | "tag" | "rename" | "goto"; title: string; value: string; hint: string; parent?: string } | null;
 type EditorSelection = { text: string; from: number; to: number; top: number; left: number } | null;
 type FinderCommand = {
   id: string;
@@ -118,6 +118,12 @@ function projectScope(name: string, parents: Readonly<Record<string, string>>): 
   return scope;
 }
 /** "Работа / Клиенты": the project with the names of the projects it is nested in. */
+function flatBlocks(blocks: ReadonlyArray<{ id: string; children?: unknown[] }>): Array<{ id: string; content?: unknown }> {
+  const out: Array<{ id: string; content?: unknown }> = [];
+  const walk = (list: ReadonlyArray<{ id: string; children?: unknown[] }>) => { for (const block of list) { out.push(block); if (block.children?.length) walk(block.children as Array<{ id: string; children?: unknown[] }>); } };
+  walk(blocks);
+  return out;
+}
 function projectPath(name: string, parents: Readonly<Record<string, string>>): string {
   const path = [name];
   for (let cur = parents[name]; cur && !path.includes(cur); cur = parents[cur]) path.unshift(cur);
@@ -342,6 +348,10 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const [dense, setDense] = useState(() => { try { return window.localStorage.getItem("nh4-dense") === "1"; } catch { return false; } });
   useEffect(() => { try { window.localStorage.setItem("nh4-closed-projects", JSON.stringify(closedProjects)); window.localStorage.setItem("nh4-sub-notes", subNotes ? "1" : "0"); window.localStorage.setItem("nh4-dense", dense ? "1" : "0"); } catch { /* optional */ } }, [closedProjects, subNotes, dense]);
   const [focusMode, setFocusMode] = useState(false);
+  const [wrapLines, setWrapLines] = useState(() => { try { return window.localStorage.getItem("nh4-wrap") !== "0"; } catch { return true; } });
+  const [editorFont, setEditorFont] = useState<"system" | "serif" | "mono">(() => { try { const v = window.localStorage.getItem("nh4-font"); return v === "serif" || v === "mono" ? v : "system"; } catch { return "system"; } });
+  const [caret, setCaret] = useState<{ line: number; col: number; lines: number } | null>(null);
+  useEffect(() => { try { window.localStorage.setItem("nh4-wrap", wrapLines ? "1" : "0"); window.localStorage.setItem("nh4-font", editorFont); } catch { /* optional */ } }, [wrapLines, editorFont]);
   const [dragProject, setDragProject] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dark, setDark] = useState(initialState.dark);
@@ -415,7 +425,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const navStackRef = useRef<string[]>([]);
   const navPosRef = useRef(-1);
   const navSilentRef = useRef(false);
-  const [navState, setNavState] = useState({ back: false, forward: false });
+  const [, setNavState] = useState({ back: false, forward: false });
   const [trashPane, setTrashPane] = useState(false);   // the trash is shown as a list in the main area
   const [railMenu, setRailMenu] = useState<null | "pinned" | "recent">(null);   // the quick list next to the narrow library column
   const [tagsOpen, setTagsOpen] = useState(() => { try { return window.localStorage.getItem("nh4-tags-open") === "1"; } catch { return false; } });
@@ -665,6 +675,12 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   }, [aiWritingRule]);
 
   useEffect(() => editor.onSelectionChange((currentEditor) => {
+    try {
+      const flat = flatBlocks(currentEditor.document as unknown as Array<{ id: string; children?: unknown[] }>);
+      const id = currentEditor.getTextCursorPosition().block.id;
+      const index = flat.findIndex((block) => block.id === id);
+      if (index >= 0) setCaret({ line: index + 1, col: currentEditor.prosemirrorView.state.selection.$from.parentOffset + 1, lines: flat.length });
+    } catch { /* the document is being replaced */ }
     const selection = currentEditor.prosemirrorView.state.selection;
     const text = currentEditor.getSelectedText();
     if (!text.trim() || selection.empty) {
@@ -1073,6 +1089,11 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
       const titleBlock = editor.document.find((block) => block.type === "heading");
       if (titleBlock) editor.updateBlock(titleBlock.id, { content: value });
       setNotice("Название заметки изменено");
+    } else if (formDialog.kind === "goto") {
+      const flat = flatBlocks(editor.document as unknown as Array<{ id: string; children?: unknown[] }>);
+      const n = Number.parseInt(value, 10);
+      if (!Number.isFinite(n) || n < 1 || n > flat.length) { setNotice(`Введите номер строки от 1 до ${flat.length}`); return; }
+      jumpToBlockRef.current(flat[n - 1].id);
     } else if (formDialog.kind === "move") {
       if (!folders.includes(value)) {
         setNotice("Выберите проект из списка");
@@ -1696,6 +1717,10 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     { id: "properties", label: activeInspector === "properties" ? "Закрыть свойства" : "Открыть свойства", hint: "Свойства текущей заметки", keywords: "свойства метка папка", icon: ChevronDown, disabled: !activeDoc, run: () => setActiveInspector((current) => current === "properties" ? null : "properties") },
     { id: "rename", label: "Переименовать заметку", hint: "Изменить название", keywords: "переименовать название", icon: Pencil, disabled: !activeDoc, run: () => activeDoc && setFormDialog({ kind: "rename", title: "Переименовать заметку", value: activeDoc.title, hint: "Название заметки" }) },
     { id: "move", label: "Переместить заметку", hint: "Выбрать проект", keywords: "переместить папка проект", icon: FolderInput, disabled: !activeDoc, run: () => moveActiveNote() },
+    { id: "datetime", label: "Вставить дату и время", hint: "Как в Блокноте Windows", keywords: "дата время f5 вставить", icon: CalendarClock, shortcut: "F5", disabled: !activeDoc, run: () => insertDateTime() },
+    { id: "goto", label: "Перейти к строке", hint: "По номеру строки", keywords: "строка перейти ctrl g", icon: ListOrdered, shortcut: "Ctrl+G", disabled: !activeDoc, run: () => goToLine() },
+    { id: "print", label: "Печать", hint: "Распечатать заметку", keywords: "печать принтер ctrl p print pdf", icon: Printer, shortcut: "Ctrl+P", disabled: !activeDoc, run: () => printNote() },
+    { id: "savetxt", label: "Сохранить как текстовый файл", hint: "Файл .txt", keywords: "сохранить как txt текст экспорт", icon: ArrowDownToLine, disabled: !activeDoc, run: () => exportText() },
     { id: "focus", label: "Режим фокуса", hint: "Скрыть панели и писать без отвлечений", keywords: "фокус zen без отвлечений полноэкранный", icon: Eye, shortcut: "F11", run: () => setFocusMode(true) },
     { id: "pin", label: activeDoc?.pinned ? "Открепить заметку" : "Закрепить заметку", hint: "Избранное", keywords: "закрепить открепить pin", icon: activeDoc?.pinned ? PinOff : Pin, disabled: !activeDoc || Boolean(activeDoc.deletedAt), run: () => togglePinActiveNote() },
     { id: "archive", label: activeDoc?.archived ? "Вернуть из архива" : "Переместить в архив", hint: "Изменить состояние заметки", keywords: "архив архивировать вернуть", icon: Archive, disabled: !activeDoc, run: () => archiveActiveNote() },
@@ -1959,11 +1984,37 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     if (!activeId) return;
     try { await sync.flush(); await host.revealNote(activeId); } catch (error) { setNotice(error instanceof Error ? error.message : "Не удалось показать файл"); }
   }, [activeId, sync]);
+  const jumpToBlockRef = useRef<(id: string) => void>(() => undefined);
   const jumpToBlock = useCallback((id: string) => {
     try { editor.setTextCursorPosition(id, "start"); } catch { /* the block is gone */ }
     document.querySelector(`[data-id="${id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [editor]);
 
+  const insertDateTime = useCallback(() => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    editor.focus();
+    editor.insertInlineContent([`${pad(now.getHours())}:${pad(now.getMinutes())} ${pad(now.getDate())}.${pad(now.getMonth() + 1)}.${now.getFullYear()}`]);
+  }, [editor]);
+  const goToLine = useCallback(() => {
+    const total = flatBlocks(editor.document as unknown as Array<{ id: string; children?: unknown[] }>).length;
+    setFormDialog({ kind: "goto", title: "Перейти к строке", value: "", hint: `Номер строки от 1 до ${total}` });
+  }, [editor]);
+  const printNote = useCallback(() => { window.print(); }, []);
+  const exportText = useCallback(() => {
+    const text = (activeId && contents[activeId] ? blocksToText(contents[activeId] as LooseBlock[]) : "").replace(/\n/g, "\r\n");
+    const url = URL.createObjectURL(new Blob(["\ufeff" + text], { type: "text/plain;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${(activeDoc?.title || "Заметка").replace(/[<>:"/\\|?*]/g, "-")}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setNotice("Заметка сохранена как текстовый файл");
+  }, [activeDoc, activeId, contents]);
+  const actionsRef = useRef({ insertDateTime, goToLine, printNote });
+  actionsRef.current = { insertDateTime, goToLine, printNote };
+
+  jumpToBlockRef.current = jumpToBlock;
   const exportMarkdown = useCallback(async () => {
     try {
       const markdown = await editor.blocksToMarkdownLossy(editor.document);
@@ -2135,6 +2186,9 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   useEffect(() => {
     const keyHandler = (event: KeyboardEvent) => {
       if (event.key === "F11") { event.preventDefault(); setFocusMode((v) => !v); return; }
+      if (event.key === "F5" && !event.ctrlKey) { event.preventDefault(); actionsRef.current.insertDateTime(); return; }
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.code === "KeyG") { event.preventDefault(); actionsRef.current.goToLine(); return; }
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.code === "KeyP") { event.preventDefault(); actionsRef.current.printNote(); return; }
       if (event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) { event.preventDefault(); goHistoryRef.current(event.key === "ArrowLeft" ? -1 : 1); return; }
       const action = matchShortcut(event);
       if (!action) return;
@@ -2293,6 +2347,11 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     for (const doc of docs) if (!doc.deletedAt) for (const tag of parseTags(tags[doc.id])) counts.set(tag, (counts.get(tag) ?? 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ru"));
   }, [docs, tags]);
+  const toggleCompare = () => {
+    if (secondId) { setSecondId(null); return; }
+    const other = [...openTabs.filter((doc) => doc.id !== activeId), ...docs.filter((doc) => !doc.deletedAt && doc.id !== activeId)].find((doc) => !isPlaceholderNote(doc.id));
+    if (other) setSecondId(other.id); else setNotice("Нужна ещё одна заметка.");
+  };
   const viewTitle = noteView === "folder" ? folder : noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : noteView === "pinned" ? "Закреплённые" : noteView === "all" ? "Все заметки" : "Недавние";
   const saveFailed = /не сохранен/i.test(savedAt);
   const saveState: "saved" | "saving" | "error" = saveFailed ? "error" : /^Сохраняем|^Сохраняется/.test(savedAt) ? "saving" : "saved";
@@ -2301,16 +2360,12 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const noteMenuClose = (event: React.MouseEvent<HTMLDivElement>) => { if ((event.target as HTMLElement).closest("button")) event.currentTarget.closest("details")?.removeAttribute("open"); };
 
   return (
-    <div className={`app-shell${focusMode ? " is-focus" : ""}${dark ? " theme-dark" : ""}${activeInspector === "ai" ? " ai-open" : ""}`} style={{ "--ai-w": `${aiWidth}px` } as React.CSSProperties}>
+    <div className={`app-shell${focusMode ? " is-focus" : ""}${wrapLines ? "" : " no-wrap"}${editorFont === "system" ? "" : ` font-${editorFont}`}${dark ? " theme-dark" : ""}${activeInspector === "ai" ? " ai-open" : ""}`} style={{ "--ai-w": `${aiWidth}px` } as React.CSSProperties}>
       <header className="topbar">
         <div className="tb-nav" role="group" aria-label="Навигация">
         <div className="brand-lockup"><div className="brand-mark"><FileText size={17} strokeWidth={2.1} /></div><span>Notepad Hub</span></div>
         </div>
         <div className="topbar-note" role="group" aria-label="Текущая заметка">
-          <div className="note-nav" role="group" aria-label="История заметок">
-            <button type="button" className="icon-button quiet bar-icon" aria-label="Назад к предыдущей заметке" title="Назад (Alt ←)" disabled={!navState.back} onClick={() => goHistory(-1)}><ArrowLeft size={16} /></button>
-            <button type="button" className="icon-button quiet bar-icon" aria-label="Вперёд к следующей заметке" title="Вперёд (Alt →)" disabled={!navState.forward} onClick={() => goHistory(1)}><ArrowRight size={16} /></button>
-          </div>
           <div className="note-crumbs">
             <button className="crumb-folder" disabled={!activeDoc} onClick={moveActiveNote} title={`Проект: ${projectPath(activeDoc?.folder ?? folder, parents)}. Нажмите, чтобы переместить заметку`}><Folder size={14} /><span>{activeDoc?.folder ?? folder}</span></button>
             <span className="crumb-sep" aria-hidden="true">/</span>
@@ -2325,10 +2380,6 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
           <div className="tb-group" role="group" aria-label="Правка">
             <button className="icon-button quiet bar-icon" aria-label="Отменить" title="Отменить (Ctrl Z)" disabled={!activeDoc} onClick={undoEdit}><Undo2 size={16} /></button>
             <button className="icon-button quiet bar-icon" aria-label="Повторить" title="Повторить (Ctrl Y)" disabled={!activeDoc} onClick={redoEdit}><Redo2 size={16} /></button>
-          </div>
-          <span className="tb-sep" aria-hidden="true" />
-          <div className="tb-group" role="group" aria-label="Вид">
-            <button className={`icon-button quiet bar-icon${secondId ? " is-on" : ""}`} aria-pressed={Boolean(secondId)} aria-label="Две заметки на экране" title="Две заметки рядом: сравнение и перенос выделенного" disabled={!activeDoc} onClick={() => { if (secondId) { setSecondId(null); return; } const other = [...openTabs.filter((doc) => doc.id !== activeId), ...docs.filter((doc) => !doc.deletedAt && doc.id !== activeId)].find((doc) => !isPlaceholderNote(doc.id)); if (other) setSecondId(other.id); else setNotice("Нужна ещё одна заметка."); }}><Columns2 size={16} /></button>
           </div>
           <span className="tb-sep" aria-hidden="true" />
             <button ref={aiTriggerRef} className={`bar-ai${activeInspector === "ai" ? " is-open" : ""}`} aria-label={activeInspector === "ai" ? "Закрыть AI-помощник" : "Открыть AI-помощник"} aria-pressed={activeInspector === "ai"} title="AI-помощник (Ctrl J)" onClick={() => activeInspector === "ai" ? closeAiAssistant() : openAiAssistant("paragraph")}><Sparkles size={15} /><span>AI</span></button>
@@ -2356,11 +2407,15 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
                 <button disabled={!activeDoc} onClick={copyNoteLink}><Link2 size={14} />Копировать ссылку на заметку</button>
                 {isHosted() && <button disabled={!activeDoc} onClick={() => void revealNote()}><ExternalLink size={14} />Показать в Проводнике</button>}
                 {activeDoc?.sourcePath && isHosted() && <button onClick={() => void toggleWriteThrough()} title={activeDoc.sourcePath}><FileText size={14} />{activeDoc.writeThrough ? "Не сохранять в файл" : "Сохранять в файл"}<small className="menu-hint">{activeDoc.sourcePath.split(/[\\/]/).pop()}</small></button>}
+                <button disabled={!activeDoc} onClick={exportText}><ArrowDownToLine size={14} />Сохранить как текст (.txt)</button>
                 <button onClick={exportMarkdown}><ArrowDownToLine size={14} />Экспорт в Markdown</button>
+                <button disabled={!activeDoc} onClick={printNote}><Printer size={14} />Печать…<kbd className="menu-key">Ctrl+P</kbd></button>
+                <div className="note-toolbar-menu-divider" />
+                <button disabled={!activeDoc} onClick={insertDateTime}><CalendarClock size={14} />Вставить дату и время<kbd className="menu-key">F5</kbd></button>
+                <button disabled={!activeDoc} onClick={goToLine}><ListOrdered size={14} />Перейти к строке…<kbd className="menu-key">Ctrl+G</kbd></button>
                 <div className="note-toolbar-menu-divider" />
                 <button disabled={!activeDoc || !isHosted()} onClick={() => void openHistory()}><Clock3 size={14} />История версий…</button>
                 <button disabled={!activeDoc} onClick={() => setActiveInspector((current) => current === "properties" ? null : "properties")}><Info size={14} />Содержание и свойства</button>
-                <button onClick={() => setFocusMode(true)}><Eye size={14} />Режим фокуса<kbd className="menu-key">F11</kbd></button>
                 {canUndoAi && <button onClick={undoAcceptedAi}><RotateCcw size={14} />Отменить AI-изменение</button>}
                 <div className="note-toolbar-menu-divider" />
                 {activeDoc?.deletedAt ? <><button onClick={restoreActiveNote}><RotateCcw size={14} />Восстановить</button><button className="destructive-action" onClick={permanentlyDeleteActiveNote}><Trash2 size={14} />Удалить навсегда</button></> : <><button disabled={!activeDoc} onClick={duplicateActiveNote}><Copy size={14} />Создать копию</button><button disabled={!activeDoc} onClick={archiveActiveNote}><Archive size={14} />{activeDoc?.archived ? "Вернуть в проект" : "В архив"}</button><div className="note-toolbar-menu-divider" /><button disabled={!activeDoc} className="destructive-action" onClick={deleteActiveNote}><Trash2 size={14} />В корзину</button></>}
@@ -2371,7 +2426,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
 
       <div className={`workspace${navigationCollapsed ? " nav-collapsed" : ""}${trashPane ? " trash-open" : ""}`}>
         <aside className={`sidebar${dense ? " is-dense" : ""}`} id="note-navigation" aria-label="Навигация по заметкам">
-          <div className="sidebar-toolbar"><h2 className="sidebar-caption" id="projects-heading">Проекты</h2><button className="icon-button tiny sidebar-add" aria-label="Добавить проект" title="Добавить проект" onClick={() => addFolder()}><Plus size={16} /></button><button ref={mobileNavTriggerRef} className="icon-button tiny desktop-nav-close" aria-expanded={!navigationCollapsed} aria-controls="note-navigation" aria-label={navigationCollapsed ? "Развернуть библиотеку" : "Свернуть библиотеку"} title={navigationCollapsed ? (aiSideBySideNav ? "Развернуть библиотеку (помощник закроется)" : "Развернуть библиотеку") : "Свернуть библиотеку"} onClick={() => { if (!navigationCollapsed) { setSidebarCollapsed(true); return; } if (aiSideBySideNav) setActiveInspector(null); setSidebarCollapsed(false); }}>{navigationCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button></div>
+          <div className="sidebar-toolbar"><h2 className="sidebar-caption" id="projects-heading">Проекты</h2><button className="icon-button tiny sidebar-add" aria-label="Добавить проект" title="Добавить проект" onClick={() => addFolder()}><Plus size={16} /></button></div>
           <div className="sidebar-body">
           <section className={`nav-section projects-section${dragProject ? " is-dragging" : ""}${dropTarget === "" ? " is-drop-root" : ""}`} aria-labelledby="projects-heading"
             onDragOver={(event) => { if (dragProject) { event.preventDefault(); setDropTarget(""); } }}
@@ -2426,6 +2481,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
             <button type="button" className={`rail-button${noteView === "archive" ? " is-on" : ""}`} aria-label="Архив" title="Архив" onClick={() => switchToSpecialView("archive")}><Archive size={17} /></button>
             <button type="button" className={`rail-button${noteView === "trash" ? " is-on" : ""}`} aria-label="Корзина" title="Корзина" onClick={() => switchToSpecialView("trash")}><Trash2 size={17} />{trashCount > 0 && <span className="rail-badge">{trashCount}</span>}</button>
           </nav>
+          <div className="sidebar-footer">
           <details className="note-toolbar-overflow library-menu settings-menu">
             <summary aria-label="Настройки приложения" title="Настройки приложения"><Settings size={16} /><span>Настройки</span></summary>
             <div className="note-toolbar-menu" onClick={noteMenuClose}>
@@ -2438,6 +2494,10 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
               {isHosted() && <><button onClick={() => void createBackupNow()}><Download size={14} />Создать резервную копию (.nhub)…</button><button onClick={() => void restoreBackupNow()}><RotateCcw size={14} />Восстановить из копии (.nhub)…</button></>}
               <button onClick={exportBackup}><Download size={14} />Сохранить копию JSON (только чтение)</button>
               <div className="note-toolbar-menu-divider" />
+              <div className="note-toolbar-menu-label">Текст заметки</div>
+              <button role="menuitemcheckbox" aria-checked={wrapLines} onClick={() => setWrapLines((v) => !v)}><WrapText size={14} />Перенос по словам{wrapLines ? " · включено" : " · выключено"}</button>
+              {([["system", "Шрифт: обычный"], ["serif", "Шрифт: с засечками"], ["mono", "Шрифт: моноширинный"]] as const).map(([value, label]) => <button key={value} role="menuitemradio" aria-checked={editorFont === value} onClick={() => setEditorFont(value)}><Type size={14} />{label}{editorFont === value ? " · выбран" : ""}</button>)}
+              <div className="note-toolbar-menu-divider" />
               <div className="note-toolbar-menu-label">Вид списка заметок</div>
               <button role="menuitemcheckbox" aria-checked={subNotes} onClick={() => setSubNotes((v) => !v)}><Folder size={14} />Заметки вложенных проектов{subNotes ? " · включено" : " · выключено"}</button>
               <button role="menuitemcheckbox" aria-checked={dense} onClick={() => setDense((v) => !v)}><List size={14} />Компактный список{dense ? " · включено" : " · выключено"}</button>
@@ -2447,6 +2507,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
               <button onClick={() => setShowShortcuts(true)}><Command size={14} />Сочетания клавиш</button>
             </div>
           </details>
+          <button ref={mobileNavTriggerRef} className="icon-button tiny desktop-nav-close sidebar-collapse" aria-expanded={!navigationCollapsed} aria-controls="note-navigation" aria-label={navigationCollapsed ? "Развернуть библиотеку" : "Свернуть библиотеку"} title={navigationCollapsed ? (aiSideBySideNav ? "Развернуть библиотеку (помощник закроется)" : "Развернуть библиотеку") : "Свернуть библиотеку"} onClick={() => { if (!navigationCollapsed) { setSidebarCollapsed(true); return; } if (aiSideBySideNav) setActiveInspector(null); setSidebarCollapsed(false); }}>{navigationCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button>
+          </div>
         </aside>
         {calendarOpen && <div className="rail-backdrop" onMouseDown={() => setCalendarOpen(false)}><div className="calendar-pop note-toolbar-menu" role="dialog" aria-label="Календарь" onMouseDown={(event) => event.stopPropagation()}>
           <div className="calendar-head">
@@ -2540,10 +2602,17 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
               <span className={`status-save is-${saveState}`} role="status" aria-live="polite" title={savedAt}>{saveState === "saved" ? <Check size={14} aria-hidden="true" /> : saveState === "saving" ? <LoaderCircle size={14} className="ai-spinner" aria-hidden="true" /> : <CircleAlert size={14} aria-hidden="true" />}{saveState === "saved" ? "Сохранено" : saveState === "saving" ? "Сохраняется…" : "Не сохранено"}{saveState === "error" && <small>{savedAt.replace(/^Не сохранено:?\s*/i, "").slice(0, 70)}</small>}</span>
               {activeDoc?.modifiedAt && <><span className="status-divider" aria-hidden="true">·</span><span className="status-modified" title="Когда заметку изменили в последний раз">Изменено {new Date(activeDoc.modifiedAt).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span></>}
               {activeDoc && backlinkCount > 0 && <><span className="status-divider" aria-hidden="true">·</span><button className="status-links" title="Заметки, которые ссылаются на эту: показать" onClick={() => { const panel = document.querySelector<HTMLDetailsElement>(".links-panel"); if (panel) { panel.open = true; panel.scrollIntoView({ block: "center", behavior: "smooth" }); } }}><Link2 size={13} aria-hidden="true" />Обратных ссылок: {backlinkCount}</button></>}
-              {activeDoc && <><span className="status-divider" aria-hidden="true">·</span>
-              <button className="status-tags" title="Метки заметки: изменить" onClick={() => setFormDialog({ kind: "tag", title: "Метки заметки", value: tags[activeDoc.id] ?? "", hint: "Метки через запятую" })}><Hash size={13} aria-hidden="true" />{noteTagList.length > 0 ? noteTagList.map((tag) => <span key={tag} className="status-tag">{tag}</span>) : <span className="status-tags-empty">добавить метки</span>}</button></>}
+              {activeDoc && noteTagList.length > 0 && <><span className="status-divider" aria-hidden="true">·</span>
+              <span className="status-tags" title="Метки заметки"><Hash size={13} aria-hidden="true" />{noteTagList.map((tag) => <span key={tag} className="status-tag">{tag}</span>)}</span></>}
             </div>
             <div className="status-right">
+              <span className="status-actions" role="group" aria-label="Режимы и метки">
+                <button type="button" className="status-action" aria-label="Режим фокуса" title="Режим фокуса: скрыть панели (F11)" onClick={() => setFocusMode(true)}><Eye size={14} aria-hidden="true" /><span>Фокус</span></button>
+                <button type="button" className={`status-action${secondId ? " is-on" : ""}`} aria-pressed={Boolean(secondId)} aria-label="Две заметки на экране" title="Две заметки рядом: сравнение и перенос выделенного" disabled={!activeDoc} onClick={toggleCompare}><Columns2 size={14} aria-hidden="true" /><span>Сравнение</span></button>
+                <button type="button" className="status-action" aria-label="Метки заметки" title="Метки заметки: изменить" disabled={!activeDoc} onClick={() => activeDoc && setFormDialog({ kind: "tag", title: "Метки заметки", value: tags[activeDoc.id] ?? "", hint: "Метки через запятую" })}><Hash size={14} aria-hidden="true" /><span>Метки</span></button>
+              </span>
+              <span className="status-divider" aria-hidden="true">·</span>
+              {activeDoc && caret && <><span className="status-caret" title="Строка и столбец курсора (как в Блокноте Windows)">Строка {caret.line} из {caret.lines}, столбец {caret.col}</span><span className="status-divider" aria-hidden="true">·</span></>}
               <span title="Слов и знаков в заметке">{noteStats.words.toLocaleString("ru")} {plural(noteStats.words, ["слово", "слова", "слов"])} · {noteStats.chars.toLocaleString("ru")} {plural(noteStats.chars, ["знак", "знака", "знаков"])}</span>
               <span className="status-divider" aria-hidden="true">·</span>
               <span className="status-zoom" role="group" aria-label="Масштаб текста">

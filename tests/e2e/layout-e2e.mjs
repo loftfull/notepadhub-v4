@@ -34,7 +34,7 @@ try {
   await page.waitForSelector(".topbar", { timeout: 40000 });
 
   // ---- the library: projects on top, notes below, one block of sections, settings at the bottom
-  const lib = await page.evaluate(() => { const q = (sel) => document.querySelector(sel)?.getBoundingClientRect(); const top = (sel) => Math.round(q(sel)?.top ?? -1); return { caption: document.querySelector(".sidebar-caption")?.textContent?.trim(), hasNewButton: !!document.querySelector(".new-note-button"), oldCaption: /БИБЛИОТЕКА/i.test(document.querySelector(".sidebar")?.innerText ?? ""), projects: top(".projects-section"), notes: top(".notes-section"), sections: top(".sections-grid"), settings: top(".sidebar > .settings-menu"), tiles: [...document.querySelectorAll(".section-tile span")].map((e) => e.textContent.trim()), notesScrollbar: getComputedStyle(document.querySelector(".notes-list")).scrollbarWidth, topbarSettings: !!document.querySelector(".topbar summary[aria-label='Настройки приложения']") }; });
+  const lib = await page.evaluate(() => { const q = (sel) => document.querySelector(sel)?.getBoundingClientRect(); const top = (sel) => Math.round(q(sel)?.top ?? -1); return { caption: document.querySelector(".sidebar-caption")?.textContent?.trim(), hasNewButton: !!document.querySelector(".new-note-button"), oldCaption: /БИБЛИОТЕКА/i.test(document.querySelector(".sidebar")?.innerText ?? ""), projects: top(".projects-section"), notes: top(".notes-section"), sections: top(".sections-grid"), settings: top(".sidebar-footer > .settings-menu"), tiles: [...document.querySelectorAll(".section-tile span")].map((e) => e.textContent.trim()), notesScrollbar: getComputedStyle(document.querySelector(".notes-list")).scrollbarWidth, topbarSettings: !!document.querySelector(".topbar summary[aria-label='Настройки приложения']") }; });
   check("projects come first, the notes under them, then the block of sections, then the settings", lib.caption === "Проекты" && lib.projects < lib.notes && lib.notes < lib.sections && lib.sections < lib.settings, JSON.stringify(lib));
   check("no 'БИБЛИОТЕКА ЗАМЕТОК' caption, no 'Новая заметка' button in the library", !lib.oldCaption && !lib.hasNewButton);
   check("favourites, recent, archive and trash are one block", JSON.stringify(lib.tiles) === JSON.stringify(["Избранное", "Недавние", "Архив", "Корзина"]));
@@ -131,7 +131,7 @@ try {
   const bar = await page.locator(".statusbar").innerText();
   check("the bottom line says 'Сохранено' and spells the words and the signs in full (слов, знак)", /Сохранено/.test(bar) && /\d+ слов/.test(bar) && /\d+ знак/.test(bar) && !/Сохраняется на этом/.test(bar), bar.replace(/\s+/g, " ").slice(0, 120));
   check("the top bar no longer shows the save label, the tag pill or a preview button", (await page.locator(".topbar .save-label, .topbar .tag-pill").count()) === 0 && (await page.getByRole("button", { name: /Предпросмотр|Редактировать$/ }).count()) === 0);
-  await page.locator(".status-tags").click();
+  await page.getByRole("button", { name: "Метки заметки" }).click();
   await page.getByRole("dialog").getByRole("textbox").fill("работа, идеи");
   await page.getByRole("button", { name: "Готово" }).click();
   await sleep(600);

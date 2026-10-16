@@ -692,15 +692,15 @@
 .app-shell .section-tile b { font-weight: 600; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink-quiet); }
 .app-shell .section-tile:hover { background: var(--surface-hover); color: var(--ink); }
 .app-shell .section-tile.selected { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong); }
-.app-shell .sidebar > .settings-menu { margin-top: 8px; position: relative; flex: 0 0 auto; }
-.app-shell .sidebar > .settings-menu > summary { display: flex; align-items: center; gap: 8px; width: 100%; height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 13.5px; cursor: pointer; list-style: none; }
-.app-shell .sidebar > .settings-menu > summary::-webkit-details-marker { display: none; }
-.app-shell .sidebar > .settings-menu > summary:hover, .app-shell .sidebar > .settings-menu[open] > summary { background: var(--surface-hover); color: var(--ink); }
-.app-shell .sidebar > .settings-menu .note-toolbar-menu { top: auto; bottom: calc(100% + 6px); left: 0; right: auto; width: 300px; max-width: calc(100vw - 24px); }
-.app-shell .workspace.nav-collapsed .sidebar > .settings-menu { margin-top: auto; }
-.app-shell .workspace.nav-collapsed .sidebar > .settings-menu > summary { width: 36px; padding: 0; justify-content: center; margin: 0 auto; }
-.app-shell .workspace.nav-collapsed .sidebar > .settings-menu > summary span { display: none; }
-.app-shell .workspace.nav-collapsed .sidebar > .settings-menu .note-toolbar-menu { bottom: 0; left: calc(100% + 10px); }
+.app-shell .sidebar-footer > .settings-menu { margin-top: 8px; position: relative; flex: 0 0 auto; }
+.app-shell .sidebar-footer > .settings-menu > summary { display: flex; align-items: center; gap: 8px; width: 100%; height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 13.5px; cursor: pointer; list-style: none; }
+.app-shell .sidebar-footer > .settings-menu > summary::-webkit-details-marker { display: none; }
+.app-shell .sidebar-footer > .settings-menu > summary:hover, .app-shell .sidebar-footer > .settings-menu[open] > summary { background: var(--surface-hover); color: var(--ink); }
+.app-shell .sidebar-footer > .settings-menu .note-toolbar-menu { top: auto; bottom: calc(100% + 6px); left: 0; right: auto; width: 300px; max-width: calc(100vw - 24px); }
+.app-shell .workspace.nav-collapsed .sidebar-footer { margin-top: auto; flex-direction: column-reverse; gap: 4px; }
+.app-shell .workspace.nav-collapsed .sidebar-footer > .settings-menu > summary { width: 36px; padding: 0; justify-content: center; margin: 0 auto; }
+.app-shell .workspace.nav-collapsed .sidebar-footer > .settings-menu > summary span { display: none; }
+.app-shell .workspace.nav-collapsed .sidebar-footer > .settings-menu .note-toolbar-menu { bottom: 0; left: calc(100% + 10px); }
 
 /* ------------------------------------------------------------------ v4.8: ideas taken over from the analogue (Obsidian): history, dated groups with a first line, outline, richer note menu */
 .app-shell .note-nav { display: inline-flex; align-items: center; gap: 0; flex: 0 0 auto; margin-right: 6px; }
@@ -777,3 +777,54 @@
 .app-shell.is-focus .focus-exit { position: fixed; top: 10px; right: 14px; z-index: var(--z-popover); display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 15px; background: var(--surface); color: var(--ink-soft); font: inherit; font-size: 12.5px; cursor: pointer; opacity: 0.55; }
 .app-shell.is-focus .focus-exit:hover, .app-shell.is-focus .focus-exit:focus-visible { opacity: 1; }
 .app-shell .status-modified { color: var(--ink-quiet); white-space: nowrap; }
+
+/* v4.11 sidebar footer, status actions, one typographic scale, Notepad parity (wrap, font, print) */
+.app-shell .sidebar-footer { display: flex; align-items: center; gap: 4px; margin-top: 8px; flex: 0 0 auto; position: relative; }
+.app-shell .sidebar-footer > .settings-menu { flex: 1 1 auto; min-width: 0; }
+.app-shell .sidebar-collapse { flex: 0 0 32px; width: 32px; height: 32px; display: grid; place-items: center; margin-left: auto; }
+.app-shell .workspace.nav-collapsed .sidebar-footer > .settings-menu { flex: 0 0 auto; }
+.app-shell .status-actions { display: inline-flex; align-items: center; gap: 2px; }
+.app-shell .status-action { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 12.5px; line-height: 1; cursor: pointer; }
+.app-shell .status-action:hover:not(:disabled) { background: var(--surface-hover); color: var(--ink); }
+.app-shell .status-action.is-on { background: var(--accent-soft); color: var(--accent-strong); }
+.app-shell .status-action:disabled { opacity: .5; cursor: default; }
+.app-shell .status-action svg, .app-shell .status-tags svg { flex: 0 0 auto; }
+.app-shell .status-caret { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* one scale for the library: rows 13.5, counts and badges 12, group titles 11.5; everything inherits the interface font */
+.app-shell .sidebar, .app-shell .statusbar, .app-shell .topbar, .app-shell .document-tabs { font-family: var(--font-ui, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif); }
+.app-shell .sidebar button, .app-shell .sidebar summary, .app-shell .statusbar button, .app-shell .statusbar input { font-family: inherit; }
+.app-shell .folder-row, .app-shell .sidebar-footer .settings-menu > summary { font-size: 13.5px; line-height: 1.2; }
+.app-shell .section-tile { font-size: 13px; line-height: 1.2; }
+.app-shell .folder-count, .app-shell .notes-count, .app-shell .section-tile b, .app-shell .notes-group button small { font-size: 12px; line-height: 1; font-variant-numeric: tabular-nums; }
+.app-shell .notes-group button { font-size: 11.5px; }
+.app-shell .folder-item .folder-row, .app-shell .notes-list button, .app-shell .section-tile { align-items: center; }
+.app-shell .statusbar, .app-shell .statusbar button, .app-shell .statusbar span { line-height: 1.2; }
+.app-shell .status-left > *, .app-shell .status-right > * { display: inline-flex; align-items: center; }
+.app-shell .status-modified, .app-shell .status-tags, .app-shell .status-links, .app-shell .status-save { font-size: 12.5px; }
+
+/* Notepad parity: word wrap off and the editor font */
+.app-shell.no-wrap .editor-card { overflow-x: auto; }
+.app-shell.no-wrap .editor-card .bn-inline-content { white-space: pre; }
+.app-shell.font-serif .bn-container { --bn-font-family: Georgia, "Cambria", "Times New Roman", serif; }
+.app-shell.font-mono .bn-container { --bn-font-family: "Cascadia Mono", Consolas, "Courier New", monospace; }
+
+@media print {
+  .app-shell .topbar, .app-shell .sidebar, .app-shell .document-tabs, .app-shell .statusbar, .app-shell .inspector-panel, .app-shell .focus-exit, .app-shell .find-bar, .app-shell .toast { display: none !important; }
+  .app-shell, .app-shell .workspace, .app-shell .main-panel { display: block !important; height: auto !important; overflow: visible !important; background: #fff !important; }
+  .app-shell .editor-card { box-shadow: none !important; border: 0 !important; width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
+}
+
+/* one interface font for every control; the brand and the headings of the app share it, weights 500 / 600 only */
+.app-shell { --font-ui: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; }
+.app-shell button, .app-shell input, .app-shell select, .app-shell summary, .app-shell textarea, .app-shell kbd, .app-shell h1, .app-shell h2 { font-family: var(--font-ui); }
+.app-shell .brand-lockup, .app-shell .brand-lockup span { font-family: var(--font-ui); font-weight: 600; letter-spacing: 0; }
+.app-shell .tab, .app-shell .tab span { font-family: var(--font-ui); font-weight: 500; letter-spacing: 0; }
+.app-shell .tab[aria-selected="true"], .app-shell .tab-wrap.is-active .tab, .app-shell .tab.is-active { font-weight: 600; }
+.app-shell .crumb-title, .app-shell .crumb-title span { font-family: var(--font-ui); font-weight: 600; letter-spacing: 0; }
+.app-shell .sidebar-caption, .app-shell .section-label h2 { font-weight: 600; letter-spacing: 0; }
+.app-shell .status-divider { display: inline-grid; place-items: center; width: 8px; line-height: 1; }
+.app-shell .sidebar-footer > .settings-menu > summary, .app-shell .sidebar-collapse { height: 34px; }
+.app-shell .sidebar-collapse { width: 34px; flex-basis: 34px; padding: 0; }
+.app-shell .sidebar-footer > .settings-menu { margin-top: 0; }
+.app-shell .sidebar-footer { align-items: center; }

@@ -34,17 +34,17 @@ try {
   await addNote("Ссылающаяся", "Смотрите [[Цель]] для подробностей.");
   await addNote("Третья", "Просто третья заметка с текстом для начала.");
 
-  // ---- history
-  check("back and forward are off at the start of the history of this session's notes only after opening", (await page.getByRole("button", { name: "Назад к предыдущей заметке" }).count()) === 1);
-  await page.getByRole("button", { name: "Назад к предыдущей заметке" }).click();
+  // ---- history: the buttons are gone (undo and redo are in the top bar), Alt + arrows still walk through the opened notes
+  check("the top bar has no back/forward note buttons", (await page.getByRole("button", { name: /Назад к предыдущей заметке|Вперёд к следующей заметке/ }).count()) === 0);
+  await page.keyboard.press("Alt+ArrowLeft");
   await sleep(600);
-  check("'Назад' opens the note opened before", (await crumb()) === "Ссылающаяся", await crumb());
+  check("Alt + left opens the note opened before", (await crumb()) === "Ссылающаяся", await crumb());
   await page.keyboard.press("Alt+ArrowLeft");
   await sleep(600);
   check("Alt + left goes one more step back", (await crumb()) === "Цель", await crumb());
-  await page.getByRole("button", { name: "Вперёд к следующей заметке" }).click();
+  await page.keyboard.press("Alt+ArrowRight");
   await sleep(600);
-  check("'Вперёд' returns to the next note", (await crumb()) === "Ссылающаяся", await crumb());
+  check("Alt + right returns to the next note", (await crumb()) === "Ссылающаяся", await crumb());
 
   // ---- notes list: date groups, sort, first line
   await page.getByRole("button", { name: /Сортировка: по названию/ }).count();
@@ -207,6 +207,52 @@ try {
   await page.getByRole("button", { name: /Выйти из режима фокуса/ }).click();
   await sleep(300);
   check("the exit button brings the panels back", (await page.locator(".app-shell.is-focus").count()) === 0 && (await page.locator(".sidebar").isVisible()));
+
+  // ---- the bottom line buttons, the collapse button at the bottom of the sidebar, Notepad parity
+  const foot = await page.locator(".sidebar-footer").boundingBox();
+  const setBox = await page.locator(".sidebar-footer .settings-menu > summary").boundingBox();
+  const colBox = await page.locator(".sidebar-footer .sidebar-collapse").boundingBox();
+  check("the collapse button sits at the bottom of the sidebar, right of 'Настройки'", Boolean(foot && colBox && setBox) && colBox.x > setBox.x + setBox.width - 4 && colBox.y > 700 && (await page.locator(".sidebar-toolbar .sidebar-collapse").count()) === 0, JSON.stringify([colBox, setBox]));
+  check("the status bar has the buttons Фокус, Сравнение, Метки", (await page.locator(".status-actions .status-action").allInnerTexts()).join("|") === "Фокус|Сравнение|Метки");
+  await page.getByRole("button", { name: "Две заметки на экране" }).click();
+  await sleep(600);
+  check("'Сравнение' in the status bar opens the second note", (await page.locator(".second-card").count()) === 1);
+  await page.getByRole("button", { name: "Две заметки на экране" }).click();
+  await sleep(400);
+  await page.getByRole("button", { name: "Метки заметки" }).click();
+  check("'Метки' in the status bar opens the tags dialog", (await page.getByRole("dialog").getByRole("textbox").count()) === 1);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Отмена" }).click().catch(() => {});
+  await page.getByRole("button", { name: "Режим фокуса" }).click();
+  await sleep(300);
+  check("'Фокус' in the status bar turns the focus mode on", (await page.locator(".app-shell.is-focus").count()) === 1);
+  await page.keyboard.press("F11");
+  await sleep(300);
+  check("the line and the column of the cursor are shown like in Notepad", /Строка \d+ из \d+, столбец \d+/.test(await page.locator(".statusbar").innerText()), (await page.locator(".statusbar").innerText()).replace(/\s+/g, " ").slice(-90));
+  await page.locator(".bn-editor").first().click();
+  await page.keyboard.press("F5");
+  await sleep(400);
+  check("F5 puts the time and the date into the text", /\d\d:\d\d \d\d\.\d\d\.\d{4}/.test(await page.locator(".bn-editor").first().innerText()));
+  await page.keyboard.press("Control+g");
+  await sleep(300);
+  check("Ctrl + G asks for a line number", (await page.getByRole("dialog").getByRole("textbox").count()) === 1 && /Перейти к строке/.test(await page.getByRole("dialog").innerText()));
+  await page.getByRole("dialog").getByRole("textbox").fill("1");
+  await page.getByRole("button", { name: "Готово" }).click();
+  await sleep(300);
+  await page.locator("summary[aria-label='Дополнительные действия заметки']").click();
+  const menuItems = await page.locator(".note-menu .note-toolbar-menu button").allInnerTexts();
+  check("the note menu has 'Сохранить как текст (.txt)', 'Печать…', 'Вставить дату и время', 'Перейти к строке…'", ["Сохранить как текст (.txt)", "Печать", "Вставить дату и время", "Перейти к строке"].every((x) => menuItems.some((y) => y.includes(x))), JSON.stringify(menuItems.slice(0, 12)));
+  await page.keyboard.press("Escape");
+  await page.locator("summary[aria-label='Настройки приложения']").click();
+  await page.getByRole("menuitemcheckbox", { name: /Перенос по словам/ }).click();
+  await page.locator("summary[aria-label='Настройки приложения']").click();
+  await page.getByRole("menuitemradio", { name: /Шрифт: моноширинный/ }).click();
+  await sleep(300);
+  check("word wrap off and the monospaced font are applied", (await page.locator(".app-shell.no-wrap.font-mono").count()) === 1);
+  await page.locator("summary[aria-label='Настройки приложения']").click();
+  await page.getByRole("menuitemcheckbox", { name: /Перенос по словам/ }).click();
+  await page.locator("summary[aria-label='Настройки приложения']").click();
+  await page.getByRole("menuitemradio", { name: /Шрифт: обычный/ }).click();
 } catch (e) {
   check("scenario completed without exceptions", false, String(e.message ?? e).split("\n").slice(0, 5).join(" | "));
 } finally {
