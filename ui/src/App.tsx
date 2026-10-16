@@ -16,7 +16,7 @@ import type { PartialBlock } from "@blocknote/core";
 import {
   AlignLeft, Archive, CalendarDays, ChevronsUpDown, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpDown, ExternalLink, Link2, Replace, ChevronLeft, ChevronRight, CircleAlert, Minus, Settings, Star, Check, ChevronDown, Clock3, Command, Copy, Download, FileText,
   Folder, FolderInput, FolderOpen, Hash, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Columns2, ImagePlus, LoaderCircle, Redo2, Tag, Wand2, RotateCcw, Search, Undo2,
-  Sparkles, Sun, Trash2, X, Eye, Pin, PinOff, List, Ellipsis, Info,
+  Sparkles, Sun, Trash2, X, Eye, Pin, PinOff, List, Ellipsis, Info, FolderPlus,
 } from "lucide-react";
 import { getAiModels, getAiProviders, streamAiTask, type HiddenModel, type AiCitation, type AiModelOption, type AiOperation, type AiProposal, type AiProvider, type AiProviderStatus, type AiScope } from "./ai";
 import { AiAssistantPanel } from "./components/AiAssistantPanel";
@@ -38,7 +38,7 @@ import { blocksToText, textToBlocks, type LooseBlock } from "./textFormat";
 const AI_EDIT_MAX_OUTPUT_TOKENS = 512;
 const AI_ANALYSIS_MAX_OUTPUT_TOKENS = 1536;
 
-type FormDialog = { kind: "folder" | "move" | "tag" | "rename"; title: string; value: string; hint: string } | null;
+type FormDialog = { kind: "folder" | "move" | "tag" | "rename"; title: string; value: string; hint: string; parent?: string } | null;
 type EditorSelection = { text: string; from: number; to: number; top: number; left: number } | null;
 type FinderCommand = {
   id: string;
@@ -95,10 +95,49 @@ const startOfDay = (ts: number) => { const d = new Date(ts); return new Date(d.g
 const MONTHS_RU = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
 const MONTHS_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
 
+const SYSTEM_PROJECTS = ["Входящие", "Импорт Windows"];
 const AUTO_NAME = /^Заметка \d+$/;
+const AUTO_IDS_KEY = "nh4-auto-name-ids";
+/** Ids of the notes that got their "Заметка N" name from the app (not typed by the person). Only these are renumbered. */
+function loadAutoIds(docs: readonly { id: string; title: string }[]): Set<string> {
+  try {
+    const raw = window.localStorage.getItem(AUTO_IDS_KEY);
+    if (raw !== null) { const list = JSON.parse(raw) as unknown; if (Array.isArray(list)) return new Set(list.filter((x): x is string => typeof x === "string")); }
+  } catch { /* falls back to the names */ }
+  return new Set(docs.filter((doc) => AUTO_NAME.test(doc.title)).map((doc) => doc.id));  // first start after the update: every existing "Заметка N" counts as automatic
+}
+function saveAutoIds(ids: ReadonlySet<string>) { try { window.localStorage.setItem(AUTO_IDS_KEY, JSON.stringify([...ids])); } catch { /* optional */ } }
 /** The next automatic name: "Заметка N", N = the count of live automatically named notes + 1. */
-function nextAutoName(docs: readonly { title: string; deletedAt?: string }[]): string {
-  return `Заметка ${docs.filter((doc) => !doc.deletedAt && AUTO_NAME.test(doc.title)).length + 1}`;
+function nextAutoName(docs: readonly { id: string; title: string; deletedAt?: string }[], autoIds: ReadonlySet<string>): string {
+  return `Заметка ${docs.filter((doc) => !doc.deletedAt && autoIds.has(doc.id) && AUTO_NAME.test(doc.title)).length + 1}`;
+}
+/** The project and every project nested in it, at any depth. */
+function projectScope(name: string, parents: Readonly<Record<string, string>>): Set<string> {
+  const scope = new Set([name]);
+  for (let grew = true; grew;) { grew = false; for (const [child, parent] of Object.entries(parents)) if (scope.has(parent) && !scope.has(child)) { scope.add(child); grew = true; } }
+  return scope;
+}
+/** "Работа / Клиенты": the project with the names of the projects it is nested in. */
+function projectPath(name: string, parents: Readonly<Record<string, string>>): string {
+  const path = [name];
+  for (let cur = parents[name]; cur && !path.includes(cur); cur = parents[cur]) path.unshift(cur);
+  return path.join(" / ");
+}
+/** Projects in tree order (parent, then its children) with their depth. A project whose parent is unknown counts as top level. */
+function projectRows(folders: readonly string[], parents: Readonly<Record<string, string>>, closed: readonly string[]): Array<{ name: string; depth: number; hasChildren: boolean }> {
+  const known = new Set(folders);
+  const kids = (parent: string) => folders.filter((name) => (parents[name] && known.has(parents[name]) ? parents[name] : "") === parent);
+  const rows: Array<{ name: string; depth: number; hasChildren: boolean }> = [];
+  const walk = (parent: string, depth: number, seen: Set<string>) => {
+    for (const name of kids(parent)) {
+      if (seen.has(name)) continue;
+      const children = kids(name);
+      rows.push({ name, depth, hasChildren: children.length > 0 });
+      if (children.length > 0 && !closed.includes(name)) walk(name, depth + 1, new Set([...seen, name]));
+    }
+  };
+  walk("", 0, new Set());
+  return rows;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -274,18 +313,36 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const activeIdRef = useRef<string | null>(initialState.activeId);
   const docsRef = useRef(initialState.docs);
   const contentsRef = useRef(initialState.contents);
+  const autoIdsRef = useRef<Set<string> | null>(null);
+  if (autoIdsRef.current === null) { autoIdsRef.current = loadAutoIds(initialState.docs); saveAutoIds(autoIdsRef.current); }
   useEffect(() => { docsRef.current = docs; contentsRef.current = contents; });
   // "Заметка N" numbers follow the order of the automatically named notes: they close up when a note is renamed, trashed or deleted
   useEffect(() => {
     let n = 0;
     const wanted = new Map<string, string>();
-    for (const doc of docs) { if (!doc.deletedAt && AUTO_NAME.test(doc.title)) { n += 1; if (doc.title !== `Заметка ${n}`) wanted.set(doc.id, `Заметка ${n}`); } }
+    const ids = autoIdsRef.current!;
+    let changed = false;
+    for (const doc of docs) {
+      if (!ids.has(doc.id)) continue;
+      if (!AUTO_NAME.test(doc.title)) { ids.delete(doc.id); changed = true; continue; }   // the person named it: no longer automatic
+      if (doc.deletedAt) continue;
+      n += 1;
+      if (doc.title !== `Заметка ${n}`) wanted.set(doc.id, `Заметка ${n}`);
+    }
+    if (changed) saveAutoIds(ids);
     if (wanted.size > 0) setDocs((current) => current.map((doc) => wanted.has(doc.id) ? { ...doc, title: wanted.get(doc.id)! } : doc));
   }, [docs]);
   const [query, setQuery] = useState("");
   const [folder, setFolder] = useState(initialState.folder);
   const [noteView, setNoteView] = useState<"folder" | "pinned" | "recent" | "archive" | "trash">("folder");
   const [folders, setFolders] = useState(initialState.folders);
+  const [parents, setParents] = useState<Record<string, string>>(initial.parents);
+  const [closedProjects, setClosedProjects] = useState<string[]>(() => { try { const v = JSON.parse(window.localStorage.getItem("nh4-closed-projects") ?? "[]") as unknown; return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []; } catch { return []; } });
+  const [subNotes, setSubNotes] = useState(() => { try { return window.localStorage.getItem("nh4-sub-notes") !== "0"; } catch { return true; } });
+  const [dense, setDense] = useState(() => { try { return window.localStorage.getItem("nh4-dense") === "1"; } catch { return false; } });
+  useEffect(() => { try { window.localStorage.setItem("nh4-closed-projects", JSON.stringify(closedProjects)); window.localStorage.setItem("nh4-sub-notes", subNotes ? "1" : "0"); window.localStorage.setItem("nh4-dense", dense ? "1" : "0"); } catch { /* optional */ } }, [closedProjects, subNotes, dense]);
+  const [dragProject, setDragProject] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dark, setDark] = useState(initialState.dark);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => window.matchMedia("(max-width: 760px)").matches);
   const [savedAt, setSavedAt] = useState("Загружено");
@@ -403,6 +460,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const pinnedDocs = docs.filter((doc) => doc.pinned && !doc.deletedAt);
   const recentDocs = docs.filter((doc) => typeof doc.lastOpenedAt === "number" && !doc.deletedAt && !doc.archived).sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0));
   const trashCount = docs.filter((doc) => doc.deletedAt).length;
+  const folderScope = subNotes ? projectScope(folder, parents) : new Set([folder]);
   const filteredDocs = docs.filter((doc) => {
     if (noteView === "trash") return Boolean(doc.deletedAt);
     if (tagFilter && !parseTags(tags[doc.id]).includes(tagFilter)) return false;
@@ -411,7 +469,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     if (noteView === "pinned") return Boolean(doc.pinned);
     if (noteView === "recent") return typeof doc.lastOpenedAt === "number" && !doc.archived;
     if (dayFilter !== null) { const t = doc.modifiedAt ?? 0; return !doc.archived && t >= dayFilter && t < dayFilter + DAY_MS; }
-    return !doc.archived && doc.folder === folder;
+    return !doc.archived && folderScope.has(doc.folder);
   }).sort((left, right) => noteView === "recent" || noteView === "pinned"
       ? (right.lastOpenedAt ?? 0) - (left.lastOpenedAt ?? 0)
       : 0);
@@ -420,9 +478,11 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const listNow = Date.now();
   const listDocs = noteView === "recent" || noteView === "pinned" ? filteredDocs
     : [...filteredDocs].sort((a, b) => notesSort === "title" ? a.title.localeCompare(b.title, "ru") : (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0));
+  const pinnedFirst = noteView === "folder" && dayFilter === null && listDocs.some((doc) => doc.pinned);
   const listGroups: Array<{ name: string; items: DocItem[] }> = notesSort === "modified" && noteView !== "recent" && noteView !== "pinned"
-    ? NOTE_GROUPS.map((name) => ({ name, items: listDocs.filter((doc) => dateGroup(doc.modifiedAt, listNow) === name) })).filter((group) => group.items.length > 0)
-    : [{ name: "", items: listDocs }];
+    ? [...(pinnedFirst ? [{ name: "Закреплённые", items: listDocs.filter((doc) => doc.pinned) }] : []),
+        ...NOTE_GROUPS.map((name) => ({ name, items: listDocs.filter((doc) => !(pinnedFirst && doc.pinned) && dateGroup(doc.modifiedAt, listNow) === name) })).filter((group) => group.items.length > 0)]
+    : [{ name: "", items: pinnedFirst ? [...listDocs.filter((doc) => doc.pinned), ...listDocs.filter((doc) => !doc.pinned)] : listDocs }];
   const snippetOf = (doc: DocItem): string => {
     for (const block of contents[doc.id] ?? []) {
       if (block.type === "heading" || block.type === "image") continue;
@@ -642,15 +702,15 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   }, [sync]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => sync.push({ docs, contents, activeId, folder, folders, dark, tags }), 350);
+    const timer = window.setTimeout(() => sync.push({ docs, contents, activeId, folder, folders, parents, dark, tags }), 350);
     return () => window.clearTimeout(timer);
-  }, [sync, docs, contents, activeId, folder, folders, dark, tags]);
+  }, [sync, docs, contents, activeId, folder, folders, parents, dark, tags]);
 
   // The host asks for a final save before the window closes.
   useEffect(() => onHostEvent("flush", () => {
-    sync.push({ docs: docsRef.current, contents: contentsRef.current, activeId: activeIdRef.current, folder, folders, dark, tags });
+    sync.push({ docs: docsRef.current, contents: contentsRef.current, activeId: activeIdRef.current, folder, folders, parents, dark, tags });
     void sync.flush().then((result) => host.flushAck(result));
-  }), [sync, folder, folders, dark, tags]);
+  }), [sync, folder, folders, parents, dark, tags]);
 
   const createNote = useCallback((title: string, heading: string = title) => {
     const id = `note-${Date.now()}`;
@@ -667,9 +727,10 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     setNoteView("folder");
     editor.replaceBlocks(editor.document, initial);
     setSavedAt("Сохраняем локально…");
+    return id;
   }, [editor, folder]);
   // a new note has no name yet: the heading is empty and shows a hint, the tab says "Заметка N" until a title is typed (N is renumbered, see below)
-  const addDocument = useCallback(() => createNote(nextAutoName(docsRef.current), ""), [createNote]);
+  const addDocument = useCallback(() => { const ids = autoIdsRef.current!; const id = createNote(nextAutoName(docsRef.current, ids), ""); ids.add(id); saveAutoIds(ids); }, [createNote]);
 
   const selectDocument = useCallback((doc: DocItem) => {
     haltAuto();
@@ -703,7 +764,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
 
   const closeTab = useCallback(async (id: string) => {
     // save first: the host gets the latest text before the tab disappears
-    sync.push({ docs: docsRef.current, contents: contentsRef.current, activeId: activeIdRef.current, folder, folders, dark, tags });
+    sync.push({ docs: docsRef.current, contents: contentsRef.current, activeId: activeIdRef.current, folder, folders, parents, dark, tags });
     const result = await sync.flush();
     if (!result.ok) setNotice("Вкладка закрыта, но часть изменений не сохранена. Проверьте строку «Сохранено» и повторите.");
     const strip = openIdsRef.current.map((openId) => docsRef.current.find((doc) => doc.id === openId)).filter((doc): doc is DocItem => Boolean(doc) && inSection(doc as DocItem));
@@ -716,7 +777,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     setActiveId(null);
     editor.replaceBlocks(editor.document, [{ type: "paragraph", content: "Нет открытых заметок. Откройте заметку из списка или создайте новую кнопкой «+»." }]);
     setSavedAt("Все изменения сохранены");
-  }, [dark, editor, folder, folders, openIds, selectDocument, sync, tags, noteView]);
+  }, [dark, editor, folder, folders, parents, openIds, selectDocument, sync, tags, noteView]);
 
   closeTabRef.current = closeTab;
 
@@ -771,7 +832,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     setNoteView("folder");
     setFolder(name);
     setSidebarCollapsed(window.matchMedia("(max-width: 760px)").matches);
-    const firstNote = docs.find((doc) => doc.folder === name && !doc.archived && !doc.deletedAt);
+    const scope = subNotes ? projectScope(name, parents) : new Set([name]);
+    const firstNote = docs.find((doc) => scope.has(doc.folder) && !doc.archived && !doc.deletedAt);
     if (firstNote) {
       selectDocument(firstNote);
       return;
@@ -780,11 +842,22 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     setActiveId(null);
     editor.replaceBlocks(editor.document, [{ type: "paragraph", content: "Проект пока пуст. Создайте заметку кнопкой «Новая заметка»." }]);
     setSavedAt("Пустой проект");
-  }, [docs, editor, selectDocument]);
+  }, [docs, editor, parents, selectDocument, subNotes]);
 
-  const addFolder = useCallback(() => {
-    setFormDialog({ kind: "folder", title: "Новый проект", value: "", hint: "Например, Проекты" });
+  const addFolder = useCallback((parent?: string) => {
+    setFormDialog(parent
+      ? { kind: "folder", title: `Новый вложенный проект в «${parent}»`, value: "", hint: "Например, Клиенты", parent }
+      : { kind: "folder", title: "Новый проект", value: "", hint: "Например, Проекты" });
   }, []);
+
+  /** Nests a project in another one (parent "" = top level). Refuses a project inside itself or inside its own nested projects. */
+  const moveProjectTo = useCallback((name: string, parent: string) => {
+    if (name === parent || (parent && projectScope(name, parents).has(parent))) { setNotice("Проект нельзя вложить в самого себя или в свой вложенный проект"); return; }
+    if ((parents[name] ?? "") === parent) return;
+    setParents((current) => { const next = { ...current }; if (parent) next[name] = parent; else delete next[name]; return next; });
+    if (parent) setClosedProjects((current) => current.filter((x) => x !== parent));
+    setNotice(parent ? `Проект «${name}» вложен в «${parent}»` : `Проект «${name}» теперь на верхнем уровне`);
+  }, [parents]);
 
   const moveActiveNote = useCallback(() => {
     if (!activeId || !activeDoc) return;
@@ -986,6 +1059,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         return;
       }
       setFolders((current) => [...current, value]);
+      if (formDialog.parent) { setParents((current) => ({ ...current, [value]: formDialog.parent! })); setClosedProjects((current) => current.filter((x) => x !== formDialog.parent)); }
       handleFolderSelect(value);
       setNotice(`Проект «${value}» создан`);
     } else if (formDialog.kind === "rename") {
@@ -1014,9 +1088,9 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     if (!activeId) return;
     const nextContents = { ...contents, [activeId]: editor.document };
     setContents(nextContents);
-    sync.push({ docs, contents: nextContents, activeId, folder, folders, dark, tags });
+    sync.push({ docs, contents: nextContents, activeId, folder, folders, parents, dark, tags });
     void sync.flush();
-  }, [activeId, contents, dark, docs, editor, folder, folders, tags, sync]);
+  }, [activeId, contents, dark, docs, editor, folder, folders, parents, tags, sync]);
 
   const requestAiTask = useCallback(async (operation: AiOperation, override?: { scope?: AiScope; instruction?: string; insightTitle?: string }) => {
     const scope = override?.scope ?? aiScope;
@@ -1728,6 +1802,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     setDocs(loaded.state.docs);
     setContents(loaded.state.contents);
     setFolders(loaded.state.folders);
+    setParents(loaded.parents);
     setTags(loaded.state.tags);
     const live = loaded.state.docs.filter((doc) => !doc.deletedAt);
     const target = (opts?.selectId ? live.find((doc) => doc.id === opts.selectId) : undefined)
@@ -2228,7 +2303,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
             <button type="button" className="icon-button quiet bar-icon" aria-label="Вперёд к следующей заметке" title="Вперёд (Alt →)" disabled={!navState.forward} onClick={() => goHistory(1)}><ArrowRight size={16} /></button>
           </div>
           <div className="note-crumbs">
-            <button className="crumb-folder" disabled={!activeDoc} onClick={moveActiveNote} title="Переместить в другой проект"><Folder size={14} /><span>{activeDoc?.folder ?? folder}</span></button>
+            <button className="crumb-folder" disabled={!activeDoc} onClick={moveActiveNote} title={`Проект: ${projectPath(activeDoc?.folder ?? folder, parents)}. Нажмите, чтобы переместить заметку`}><Folder size={14} /><span>{activeDoc?.folder ?? folder}</span></button>
             <span className="crumb-sep" aria-hidden="true">/</span>
             <button className="crumb-title" disabled={!activeDoc} onClick={() => activeDoc && setFormDialog({ kind: "rename", title: "Переименовать заметку", value: activeDoc.title, hint: "Название заметки" })} title="Переименовать заметку"><span>{activeDoc?.title ?? "Новая заметка"}</span><Pencil size={13} aria-hidden="true" /></button>
           </div>
@@ -2285,11 +2360,30 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
       </header>
 
       <div className={`workspace${navigationCollapsed ? " nav-collapsed" : ""}${trashPane ? " trash-open" : ""}`}>
-        <aside className="sidebar" id="note-navigation" aria-label="Навигация по заметкам">
-          <div className="sidebar-toolbar"><h2 className="sidebar-caption" id="projects-heading">Проекты</h2><button className="icon-button tiny sidebar-add" aria-label="Добавить проект" title="Добавить проект" onClick={addFolder}><Plus size={16} /></button><button ref={mobileNavTriggerRef} className="icon-button tiny desktop-nav-close" aria-expanded={!navigationCollapsed} aria-controls="note-navigation" aria-label={navigationCollapsed ? "Развернуть библиотеку" : "Свернуть библиотеку"} title={navigationCollapsed ? (aiSideBySideNav ? "Развернуть библиотеку (помощник закроется)" : "Развернуть библиотеку") : "Свернуть библиотеку"} onClick={() => { if (!navigationCollapsed) { setSidebarCollapsed(true); return; } if (aiSideBySideNav) setActiveInspector(null); setSidebarCollapsed(false); }}>{navigationCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button></div>
+        <aside className={`sidebar${dense ? " is-dense" : ""}`} id="note-navigation" aria-label="Навигация по заметкам">
+          <div className="sidebar-toolbar"><h2 className="sidebar-caption" id="projects-heading">Проекты</h2><button className="icon-button tiny sidebar-add" aria-label="Добавить проект" title="Добавить проект" onClick={() => addFolder()}><Plus size={16} /></button><button ref={mobileNavTriggerRef} className="icon-button tiny desktop-nav-close" aria-expanded={!navigationCollapsed} aria-controls="note-navigation" aria-label={navigationCollapsed ? "Развернуть библиотеку" : "Свернуть библиотеку"} title={navigationCollapsed ? (aiSideBySideNav ? "Развернуть библиотеку (помощник закроется)" : "Развернуть библиотеку") : "Свернуть библиотеку"} onClick={() => { if (!navigationCollapsed) { setSidebarCollapsed(true); return; } if (aiSideBySideNav) setActiveInspector(null); setSidebarCollapsed(false); }}>{navigationCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button></div>
           <div className="sidebar-body">
-          <section className="nav-section projects-section" aria-labelledby="projects-heading">
-            {folders.map((name) => <button key={name} className={`folder-row${noteView === "folder" && folder === name ? " selected" : ""}`} aria-current={noteView === "folder" && folder === name ? "page" : undefined} onClick={() => handleFolderSelect(name)}><Folder size={16} className="folder-icon" /><span>{name === "Архив" ? "Архив · проект" : name}</span><span className="folder-count">{docs.filter((doc) => doc.folder === name && !doc.deletedAt && !doc.archived).length}</span></button>)}
+          <section className={`nav-section projects-section${dragProject ? " is-dragging" : ""}${dropTarget === "" ? " is-drop-root" : ""}`} aria-labelledby="projects-heading"
+            onDragOver={(event) => { if (dragProject) { event.preventDefault(); setDropTarget(""); } }}
+            onDrop={(event) => { if (dragProject) { event.preventDefault(); moveProjectTo(dragProject, ""); setDragProject(null); setDropTarget(null); } }}>
+            {projectRows(folders, parents, closedProjects).map(({ name, depth, hasChildren }) => {
+              const system = SYSTEM_PROJECTS.includes(name);
+              const scope = subNotes ? projectScope(name, parents) : new Set([name]);
+              const count = docs.filter((doc) => scope.has(doc.folder) && !doc.deletedAt && !doc.archived).length;
+              const open = !closedProjects.includes(name);
+              return <div key={name} className={`folder-item${dropTarget === name ? " is-drop" : ""}${dragProject === name ? " is-dragged" : ""}`} style={{ paddingLeft: depth * 14 }} data-depth={depth}
+                draggable={!system}
+                onDragStart={(event) => { if (system) return; event.dataTransfer.setData("text/plain", name); event.dataTransfer.effectAllowed = "move"; setDragProject(name); }}
+                onDragEnd={() => { setDragProject(null); setDropTarget(null); }}
+                onDragOver={(event) => { if (dragProject && !system && dragProject !== name) { event.preventDefault(); event.stopPropagation(); setDropTarget(name); } }}
+                onDrop={(event) => { if (dragProject && !system) { event.preventDefault(); event.stopPropagation(); moveProjectTo(dragProject, name); setDragProject(null); setDropTarget(null); } }}>
+                {hasChildren
+                  ? <button type="button" className="folder-fold" aria-label={open ? `Свернуть проект «${name}»` : `Развернуть проект «${name}»`} aria-expanded={open} onClick={() => setClosedProjects((current) => current.includes(name) ? current.filter((x) => x !== name) : [...current, name])}><ChevronRight size={13} className={open ? "is-open" : undefined} aria-hidden="true" /></button>
+                  : <span className="folder-fold-gap" aria-hidden="true" />}
+                <button className={`folder-row${noteView === "folder" && folder === name ? " selected" : ""}`} aria-current={noteView === "folder" && folder === name ? "page" : undefined} onClick={() => handleFolderSelect(name)}><Folder size={16} className="folder-icon" /><span>{name === "Архив" ? "Архив · проект" : name}</span><span className="folder-count">{count}</span></button>
+                {!system && <button type="button" className="folder-add" aria-label={`Новый вложенный проект в «${name}»`} title="Новый вложенный проект" onClick={() => addFolder(name)}><FolderPlus size={14} aria-hidden="true" /></button>}
+              </div>;
+            })}
           </section>
           <section className="nav-section notes-section" aria-label="Заметки раздела">
             <div className="section-label"><h2>{noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : noteView === "pinned" ? "Избранное" : noteView === "recent" ? "Недавние" : "Заметки"}</h2><span className="notes-tools">{dayFilter !== null && <button type="button" className="day-chip" title="Показать все заметки проекта" onClick={() => setDayFilter(null)}>{new Date(dayFilter).getDate()} {MONTHS_GEN[new Date(dayFilter).getMonth()]} <X size={11} aria-hidden="true" /></button>}{listGroups.some((g) => g.name) && <button type="button" className="icon-button tiny" aria-label="Свернуть или развернуть все группы" title="Свернуть или развернуть все группы" onClick={() => setClosedGroups((current) => current.length > 0 ? [] : listGroups.map((g) => g.name).filter(Boolean))}><ChevronsUpDown size={14} /></button>}<button type="button" className={`icon-button tiny${dayFilter !== null || calendarOpen ? " is-on" : ""}`} aria-label="Календарь: заметки по дням" aria-expanded={calendarOpen} title="Календарь: заметки по дням" onClick={() => setCalendarOpen((open) => !open)}><CalendarDays size={14} /></button><button type="button" className="icon-button tiny" aria-label={notesSort === "modified" ? "Сортировка: по изменению. Нажмите, чтобы сортировать по названию" : "Сортировка: по названию. Нажмите, чтобы сортировать по изменению"} title={notesSort === "modified" ? "Сначала изменённые: нажмите для сортировки по названию" : "По названию: нажмите для сортировки по изменению"} onClick={() => { const next = notesSort === "modified" ? "title" : "modified"; setNotesSort(next); try { window.localStorage.setItem("nh4-notes-sort", next); } catch { /* optional */ } }}><ArrowUpDown size={14} /></button><button type="button" className={`icon-button tiny${notesPreview ? " is-on" : ""}`} aria-pressed={notesPreview} aria-label="Показывать начало текста под названием" title="Начало текста под названием" onClick={() => { const next = !notesPreview; setNotesPreview(next); try { window.localStorage.setItem("nh4-notes-preview", next ? "1" : "0"); } catch { /* optional */ } }}><AlignLeft size={14} /></button><span className="notes-count">{filteredDocs.length}</span></span></div>
@@ -2332,6 +2426,10 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
               <div className="note-toolbar-menu-label">Резервные копии</div>
               {isHosted() && <><button onClick={() => void createBackupNow()}><Download size={14} />Создать резервную копию (.nhub)…</button><button onClick={() => void restoreBackupNow()}><RotateCcw size={14} />Восстановить из копии (.nhub)…</button></>}
               <button onClick={exportBackup}><Download size={14} />Сохранить копию JSON (только чтение)</button>
+              <div className="note-toolbar-menu-divider" />
+              <div className="note-toolbar-menu-label">Вид списка заметок</div>
+              <button role="menuitemcheckbox" aria-checked={subNotes} onClick={() => setSubNotes((v) => !v)}><Folder size={14} />Заметки вложенных проектов{subNotes ? " · включено" : " · выключено"}</button>
+              <button role="menuitemcheckbox" aria-checked={dense} onClick={() => setDense((v) => !v)}><List size={14} />Компактный список{dense ? " · включено" : " · выключено"}</button>
               <div className="note-toolbar-menu-divider" />
               <div className="note-toolbar-menu-label">Внешний вид и справка</div>
               <button aria-label="Переключить тему" onClick={() => setDark((value) => !value)}>{dark ? <Sun size={14} /> : <Moon size={14} />}{dark ? "Светлая тема" : "Тёмная тема"}</button>

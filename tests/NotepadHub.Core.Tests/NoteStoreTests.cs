@@ -94,6 +94,27 @@ public class NoteStoreTests
     }
 
     [Fact]
+    public void Projects_nest_without_cycles_and_deleting_a_parent_lifts_its_children()
+    {
+        using var t = new TempRoot();
+        using var s = t.Open();
+        var a = s.CreateProject("Работа");
+        var b = s.CreateProject("Клиенты", a.Id);
+        var c = s.CreateProject("Иванов", b.Id);
+        Assert.Equal(a.Id, s.Projects.First(p => p.Id == b.Id).ParentId);
+        Assert.Throws<InvalidOperationException>(() => s.MoveProject(a.Id, c.Id));
+        Assert.Throws<InvalidOperationException>(() => s.MoveProject(a.Id, a.Id));
+        Assert.Throws<InvalidOperationException>(() => s.MoveProject("inbox", a.Id));
+        Assert.Throws<InvalidOperationException>(() => s.MoveProject(c.Id, "inbox"));
+        s.MoveProject(c.Id, "");
+        Assert.Equal("", s.Projects.First(p => p.Id == c.Id).ParentId);
+        s.MoveProject(c.Id, b.Id);
+        s.DeleteProject(b.Id);
+        Assert.Equal(a.Id, s.Projects.First(p => p.Id == c.Id).ParentId);
+        Assert.Equal("", s.CreateProject("Без родителя", "missing").ParentId);
+    }
+
+    [Fact]
     public void History_snapshots_previous_text_and_rejects_bad_names_and_ids()
     {
         using var t = new TempRoot();

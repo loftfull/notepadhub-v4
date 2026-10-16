@@ -4,7 +4,7 @@
 
 export const CONTRACT = 1;
 
-export type HostProject = { id: string; name: string; order: number; isSystem: boolean; showInTabs: boolean };
+export type HostProject = { id: string; name: string; order: number; isSystem: boolean; showInTabs: boolean; parentId?: string };
 export type HostNote = {
   id: string; title: string; projectId: string; tags: string;
   createdUtc: string; updatedUtc: string; lastOpenedUtc: string;
@@ -106,8 +106,14 @@ function createMock(): Transport {
         const name = String(p.name ?? "").trim();
         const found = projects.find((x) => x.name.toLowerCase() === name.toLowerCase());
         if (found) return found;
-        const proj = { id: crypto.randomUUID().replace(/-/g, ""), name, order: projects.length, isSystem: false, showInTabs: true };
+        const parent = projects.find((x) => x.id === p.parentId && !x.isSystem);
+        const proj = { id: crypto.randomUUID().replace(/-/g, ""), name, order: projects.length, isSystem: false, showInTabs: true, parentId: parent?.id ?? "" };
         projects.push(proj); return proj;
+      }
+      case "moveProject": {
+        const mine = projects.find((x) => x.id === p.id);
+        if (mine && !mine.isSystem) mine.parentId = String(p.parentId ?? "");
+        return {};
       }
       case "upsertNote": {
         const u = p as unknown as UpsertNote;
@@ -148,7 +154,8 @@ export const callHost = <T = unknown,>(type: string, payload?: unknown) => call<
 
 export const host = {
   bootstrap: () => call<Bootstrap>("bootstrap"),
-  createProject: (name: string) => call<HostProject>("createProject", { name }),
+  createProject: (name: string, parentId = "") => call<HostProject>("createProject", { name, parentId }),
+  moveProject: (id: string, parentId: string) => call<Record<string, never>>("moveProject", { id, parentId }),
   upsertNote: (note: UpsertNote) => call<{ id: string; updatedUtc: string }>("upsertNote", note),
   deleteNote: (id: string) => call<Record<string, never>>("deleteNote", { id }),
   saveSettings: (s: Partial<HostSettings>) => call<Record<string, never>>("saveSettings", s),

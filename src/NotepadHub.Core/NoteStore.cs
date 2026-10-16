@@ -160,9 +160,9 @@ public sealed class NoteStore : IDisposable
         lock (_sync) JsonIO.WriteAtomic(Paths.ProjectsPath, _projects.OrderBy(p => p.Order).ToList());
     }
 
-    public IReadOnlyList<ProjectModel> Projects { get { lock (_sync) return _projects.OrderBy(p => p.Order).Select(p => new ProjectModel { Id = p.Id, Name = p.Name, Order = p.Order, IsSystem = p.IsSystem, ShowInTabs = p.ShowInTabs }).ToList(); } }
+    public IReadOnlyList<ProjectModel> Projects { get { lock (_sync) return _projects.OrderBy(p => p.Order).Select(p => new ProjectModel { Id = p.Id, Name = p.Name, Order = p.Order, IsSystem = p.IsSystem, ShowInTabs = p.ShowInTabs, ParentId = p.ParentId }).ToList(); } }
 
-    public ProjectModel CreateProject(string name)
+    public ProjectModel CreateProject(string name, string parentId = "")
     {
         name = (name ?? "").Trim();
         if (name.Length == 0) throw new ArgumentException("Название папки пустое.");
@@ -171,11 +171,32 @@ public sealed class NoteStore : IDisposable
         {
             var existing = _projects.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.CurrentCultureIgnoreCase));
             if (existing != null) return existing;
+            parentId = _projects.Any(p => p.Id == parentId && !p.IsSystem) ? parentId : "";
             var order = _projects.Where(p => p.ShowInTabs).Select(p => p.Order).DefaultIfEmpty(0).Max() + 1;
-            var project = new ProjectModel { Id = Guid.NewGuid().ToString("N"), Name = name, Order = order, IsSystem = false, ShowInTabs = true };
+            var project = new ProjectModel { Id = Guid.NewGuid().ToString("N"), Name = name, Order = order, IsSystem = false, ShowInTabs = true, ParentId = parentId };
             _projects.Add(project);
             SaveProjects();
             return project;
+        }
+    }
+
+    /// <summary>Nests a project in another one (empty parent = top level). A project cannot go inside itself or its own descendants; system projects stay on top.</summary>
+    public void MoveProject(string id, string parentId)
+    {
+        parentId ??= "";
+        lock (_sync)
+        {
+            var p = _projects.FirstOrDefault(x => x.Id == id) ?? throw new KeyNotFoundException("Проект не найден.");
+            if (p.IsSystem) throw new InvalidOperationException("Системный проект нельзя переместить.");
+            if (parentId.Length > 0)
+            {
+                var parent = _projects.FirstOrDefault(x => x.Id == parentId) ?? throw new KeyNotFoundException("Проект назначения не найден.");
+                if (parent.IsSystem) throw new InvalidOperationException("Внутрь системного проекта вкладывать нельзя.");
+                for (var cur = parent; cur != null; cur = _projects.FirstOrDefault(x => x.Id == cur.ParentId))
+                    if (cur.Id == id) throw new InvalidOperationException("Проект нельзя вложить в самого себя или в свой вложенный проект.");
+            }
+            p.ParentId = parentId;
+            SaveProjects();
         }
     }
 
@@ -201,6 +222,7 @@ public sealed class NoteStore : IDisposable
             if (p.IsSystem) throw new InvalidOperationException("Системную папку нельзя удалить.");
             var moved = 0;
             foreach (var n in _notes.Where(n => n.ProjectId == id).ToList()) { n.ProjectId = "inbox"; n.UpdatedUtc = Now(); SaveMeta(n); moved++; }
+            foreach (var child in _projects.Where(c => c.ParentId == id)) child.ParentId = p.ParentId;
             _projects.Remove(p);
             SaveProjects();
             return moved;

@@ -119,6 +119,73 @@ try {
   await page.locator(".day-chip").click();
   await sleep(300);
   check("the chip clears the day filter", (await page.locator(".day-chip").count()) === 0);
+
+  // ---- nested projects: tree, count with nested notes, fold, settings switch, drag and drop, saved on disk
+  const addProject = async (name, parentRow) => {
+    if (parentRow) { await page.locator(".folder-item", { hasText: parentRow }).first().hover(); await page.getByRole("button", { name: `Новый вложенный проект в «${parentRow}»` }).click(); }
+    else await page.getByRole("button", { name: "Добавить проект" }).click();
+    await page.getByRole("dialog").getByRole("textbox").fill(name);
+    await page.getByRole("button", { name: "Готово" }).click();
+    await sleep(500);
+  };
+  await addProject("Работа");
+  await addProject("Клиенты", "Работа");
+  check("a nested project sits one level deeper than its parent", (await page.locator(".folder-item[data-depth='1']", { hasText: "Клиенты" }).count()) === 1 && (await page.locator(".folder-item[data-depth='0']", { hasText: "Работа" }).count()) === 1);
+  await addNote("Договор", "Текст договора с клиентом.");
+  await sleep(500);
+  const countOf = async (name) => (await page.locator(".folder-item", { hasText: name }).first().locator(".folder-count").innerText()).trim();
+  check("the parent counts the notes of its nested projects", (await countOf("Работа")) === "1" && (await countOf("Клиенты")) === "1", `${await countOf("Работа")}/${await countOf("Клиенты")}`);
+  await page.locator(".folder-row", { hasText: "Работа" }).click();
+  await sleep(400);
+  check("selecting the parent lists the notes of the nested project too", (await page.locator(".notes-list .note-name", { hasText: "Договор" }).count()) === 1);
+  await page.locator("summary[aria-label='Настройки приложения']").click();
+  await page.getByRole("menuitemcheckbox", { name: /Заметки вложенных проектов/ }).click();
+  await sleep(400);
+  check("the setting 'Заметки вложенных проектов' limits the list to the project itself", (await page.locator(".notes-list .note-name", { hasText: "Договор" }).count()) === 0);
+  await page.locator("summary[aria-label='Настройки приложения']").click();
+  await page.getByRole("menuitemcheckbox", { name: /Заметки вложенных проектов/ }).click();
+  await sleep(300);
+  check("and switches back", (await page.locator(".notes-list .note-name", { hasText: "Договор" }).count()) === 1);
+  await page.getByRole("button", { name: "Свернуть проект «Работа»" }).click();
+  check("a parent folds and hides its nested projects", (await page.locator(".folder-item", { hasText: "Клиенты" }).count()) === 0);
+  await page.getByRole("button", { name: "Развернуть проект «Работа»" }).click();
+  await page.locator(".folder-item", { hasText: "Клиенты" }).dragTo(page.locator(".projects-section"), { targetPosition: { x: 20, y: (await page.locator(".projects-section").boundingBox()).height - 3 } });
+  await sleep(500);
+  check("dragging a project to the free place under the list makes it top level", (await page.locator(".folder-item[data-depth='0']", { hasText: "Клиенты" }).count()) === 1);
+  await page.locator(".folder-item", { hasText: "Клиенты" }).dragTo(page.locator(".folder-item", { hasText: "Работа" }).first());
+  await sleep(500);
+  check("dragging a project onto another nests it", (await page.locator(".folder-item[data-depth='1']", { hasText: "Клиенты" }).count()) === 1);
+  await page.locator(".folder-item", { hasText: "Работа" }).first().dragTo(page.locator(".folder-item", { hasText: "Клиенты" }).first());
+  await sleep(400);
+  check("a project cannot be nested inside its own nested project", (await page.locator(".folder-item[data-depth='0']", { hasText: "Работа" }).count()) === 1 && /нельзя вложить/.test(await page.locator(".toast").first().innerText().catch(() => "")));
+  if (process.env.NH_SHOT) await page.screenshot({ path: process.env.NH_SHOT });
+  const findFile = (dir, name) => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const f = path.join(dir, e.name); if (e.isDirectory()) { const r = findFile(f, name); if (r) return r; } else if (e.name === name) return f; } return null; };
+  await sleep(1500);
+  const saved = JSON.parse(fs.readFileSync(findFile(root, "projects.json"), "utf8"));
+  const work = saved.find((x) => x.Name === "Работа"), clients = saved.find((x) => x.Name === "Клиенты");
+  check("the nesting is saved in projects.json", Boolean(work && clients) && clients.ParentId === work.Id && work.ParentId === "", JSON.stringify(saved.map((x) => [x.Name, x.ParentId])));
+
+  // ---- the automatic name belongs to notes the app named, not to a title the person typed
+  await page.getByRole("button", { name: "Быстро создать заметку" }).click();
+  await sleep(500);
+  await addNote("Заметка 77", "Эту заметку назвал человек.");
+  await sleep(800);
+  const titles = await page.locator(".notes-list .note-name").allInnerTexts();
+  check("a note the person named 'Заметка 77' keeps its name", titles.includes("Заметка 77"), JSON.stringify(titles.filter((x) => x.startsWith("Заметка"))));
+
+  // ---- a pinned note goes to its own group on top; the list can be compact
+  await page.locator("summary[aria-label='Дополнительные действия заметки']").click();
+  await page.locator(".note-menu .note-toolbar-menu").getByRole("button", { name: "Закрепить", exact: true }).click();
+  await sleep(500);
+  const groupsNow = await page.locator(".notes-group").allInnerTexts();
+  check("pinned notes form the first group of the list", /закреплённые/i.test(groupsNow[0] ?? ""), JSON.stringify(groupsNow));
+  await page.locator("summary[aria-label='Настройки приложения']").click();
+  await page.getByRole("menuitemcheckbox", { name: /Компактный список/ }).click();
+  await sleep(300);
+  const rowH = (await page.locator(".notes-list li:not(.notes-group) button").first().boundingBox()).height;
+  check("the compact list makes rows lower", rowH <= 27 && (await page.locator(".sidebar.is-dense").count()) === 1, String(rowH));
+  await page.locator("summary[aria-label='Настройки приложения']").click();
+  await page.getByRole("menuitemcheckbox", { name: /Компактный список/ }).click();
 } catch (e) {
   check("scenario completed without exceptions", false, String(e.message ?? e).split("\n").slice(0, 5).join(" | "));
 } finally {

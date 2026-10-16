@@ -29,7 +29,8 @@ export function blocksOf(note: HostNote): PartialBlock[] {
   return asBlocks(textToBlocks(note.content));
 }
 
-export type LoadedHost = { state: LabState; boot: Bootstrap; projectIds: Map<string, string> };
+/** `parents` maps a project name to the name of the project it is nested in (top-level projects are absent). */
+export type LoadedHost = { state: LabState; boot: Bootstrap; projectIds: Map<string, string>; parents: Record<string, string> };
 
 export function toLabState(boot: Bootstrap): LoadedHost {
   const projects = [...boot.projects].sort((a, b) => a.order - b.order);
@@ -63,8 +64,10 @@ export function toLabState(boot: Bootstrap): LoadedHost {
   const selected = live.find((d) => d.id === boot.settings.selectedNoteId)
     ?? live.find((d) => d.folder === activeProject && !d.archived) ?? live.find((d) => !d.archived) ?? null;
   const dark = boot.settings.theme === "dark" || (boot.settings.theme === "system" && window.matchMedia?.("(prefers-color-scheme: dark)").matches === true);
+  const parents: Record<string, string> = {};
+  for (const p of projects) { const parent = p.parentId ? nameById.get(p.parentId) : undefined; if (parent) parents[p.name] = parent; }
   return {
-    boot, projectIds,
+    boot, projectIds, parents,
     state: { schemaVersion: 1, docs, contents, activeId: selected?.id ?? null, folder: selected?.folder ?? activeProject, folders, dark, tags },
   };
 }
@@ -78,7 +81,7 @@ export async function loadFromHost(): Promise<LoadedHost> {
 // ---------------------------------------------------------------------------------------------------------------------
 
 export type SyncInput = {
-  docs: DocItem[]; contents: Record<string, PartialBlock[]>; folders: string[]; tags: Record<string, string>;
+  docs: DocItem[]; contents: Record<string, PartialBlock[]>; folders: string[]; parents: Record<string, string>; tags: Record<string, string>;
   activeId: string | null; folder: string; dark: boolean;
 };
 export type SyncStatus = { state: "idle" | "saving" | "saved" | "error"; message: string };
@@ -96,6 +99,7 @@ export const EDITOR_LIMIT_CHARS = 262144;
 export class HostSync {
   private known = new Map<string, { sig: string; blocks: unknown; blocksJson: string }>();
   private projectIds: Map<string, string>;
+  private knownParents: Record<string, string> = {};
   private latest: SyncInput | null = null;
   private running: Promise<void> | null = null;
   private lastSettings = "";
@@ -107,6 +111,7 @@ export class HostSync {
 
   constructor(initial: LoadedHost) {
     this.projectIds = new Map(initial.projectIds);
+    this.knownParents = { ...initial.parents };
     this.seed(initial);
   }
 
@@ -117,6 +122,7 @@ export class HostSync {
     this.cancelRetry();
     this.known.clear(); this.externalIds.clear(); this.failed.clear(); this.latest = null; this.retries = 0;
     this.projectIds = new Map(loaded.projectIds);
+    this.knownParents = { ...loaded.parents };
     this.seed(loaded);
   }
 
@@ -175,15 +181,23 @@ export class HostSync {
     } finally { this.running = null; }
   }
 
-  private async run(s: SyncInput): Promise<void> {
+  private async run(input: SyncInput): Promise<void> {
+    const s: SyncInput = { ...input, parents: input.parents ?? {} };
     this.onStatus({ state: "saving", message: "Сохраняем…" });
     const titles = new Map(s.docs.map((d) => [d.id, d.title]));
     let written = 0;
     try {
       for (const name of s.folders) {
         if (this.projectIds.has(name)) continue;
-        const project = await host.createProject(name);
+        const project = await host.createProject(name, this.projectIds.get(s.parents[name] ?? "") ?? "");
         this.projectIds.set(project.name, project.id);
+        this.knownParents[name] = s.parents[name] ?? "";
+      }
+      for (const name of s.folders) {
+        const id = this.projectIds.get(name);
+        if (!id || (this.knownParents[name] ?? "") === (s.parents[name] ?? "")) continue;
+        await host.moveProject(id, this.projectIds.get(s.parents[name] ?? "") ?? "");
+        this.knownParents[name] = s.parents[name] ?? "";
       }
       for (const doc of s.docs) {
         try {

@@ -12,6 +12,8 @@ public sealed class ProjectModel
     public int Order { get; set; }
     public bool IsSystem { get; set; }
     public bool ShowInTabs { get; set; } = true;
+    /// <summary>Id of the project this one is nested in; empty for a top-level project. 3.0.x ignores the property.</summary>
+    public string ParentId { get; set; } = "";
 }
 
 public sealed class NoteMeta

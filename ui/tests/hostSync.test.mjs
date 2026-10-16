@@ -21,10 +21,10 @@ const para = (text) => [{ type: "paragraph", content: text, children: [] }];
 const loaded = (notes) => ({
   state: { schemaVersion: 1, docs: [], contents: {}, activeId: null, folder: "Входящие", folders: ["Входящие"], dark: false, tags: {} },
   boot: { contract: 1, hostVersion: "t", mode: "host", projects: [{ id: "inbox", name: "Входящие", order: 0, isSystem: true, showInTabs: true }], notes, settings: { activeProjectId: "inbox", selectedNoteId: "", theme: "light", sidebarVisible: true } },
-  projectIds: new Map([["Входящие", "inbox"]]),
+  projectIds: new Map([["Входящие", "inbox"]]), parents: {},
 });
 const doc = (id, title) => ({ id, title, folder: "Входящие", updated: "", icon: "note" });
-const input = (docs, contents) => ({ docs, contents, folders: ["Входящие"], tags: {}, activeId: null, folder: "Входящие", dark: false });
+const input = (docs, contents) => ({ docs, contents, folders: ["Входящие"], parents: {}, tags: {}, activeId: null, folder: "Входящие", dark: false });
 
 test("one oversized note is reported by name and does not stop the others from being saved", async () => {
   const sent = [];
@@ -86,3 +86,21 @@ test("an unchanged library sends nothing", async () => {
   assert.equal(calls, 0);
 });
 
+
+test("a nested project is created under its parent and a later move is sent once", async () => {
+  const calls = [];
+  host.createProject = async (name, parentId) => { calls.push(["create", name, parentId]); return { id: name === "Работа" ? "w1" : "c1", name, order: 1, isSystem: false, showInTabs: true, parentId }; };
+  host.moveProject = async (id, parentId) => { calls.push(["move", id, parentId]); return {}; };
+  host.upsertNote = async (n) => ({ id: n.id, updatedUtc: "" });
+  host.saveSettings = async () => ({});
+  const sync = new HostSync(loaded([]));
+  const base = { ...input([], {}), folders: ["Входящие", "Работа", "Клиенты"] };
+  sync.push({ ...base, parents: { "Клиенты": "Работа" } });
+  await sync.flush();
+  assert.deepEqual(calls, [["create", "Работа", ""], ["create", "Клиенты", "w1"]]);
+  sync.push({ ...base, parents: {} });
+  await sync.flush();
+  sync.push({ ...base, parents: {} });
+  await sync.flush();
+  assert.deepEqual(calls.slice(2), [["move", "c1", ""]]);
+});

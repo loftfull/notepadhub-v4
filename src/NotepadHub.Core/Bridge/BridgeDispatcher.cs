@@ -29,7 +29,7 @@ public sealed class BridgeException : Exception
     public BridgeException(string code, string message) : base(message) { Code = code; }
 }
 
-public sealed record BridgeProject(string Id, string Name, int Order, bool IsSystem, bool ShowInTabs);
+public sealed record BridgeProject(string Id, string Name, int Order, bool IsSystem, bool ShowInTabs, string ParentId);
 
 public sealed record BridgeNote(
     string Id, string Title, string ProjectId, string Tags, string CreatedUtc, string UpdatedUtc, string LastOpenedUtc,
@@ -140,7 +140,8 @@ public sealed class BridgeDispatcher
         switch (type)
         {
             case "bootstrap": return Bootstrap();
-            case "createProject": return Project(_store.CreateProject(Read<NameRequest>(payload).Name));
+            case "createProject": { var r = Read<NameRequest>(payload); return Project(_store.CreateProject(r.Name, r.ParentId ?? "")); }
+            case "moveProject": { var r = Read<MoveProjectRequest>(payload); _store.MoveProject(r.Id, r.ParentId ?? ""); return new { }; }
             case "renameProject": { var r = Read<RenameRequest>(payload); _store.RenameProject(r.Id, r.Name); return new { }; }
             case "deleteProject": return new { movedNotes = _store.DeleteProject(Read<IdRequest>(payload).Id) };
             case "upsertNote": return Upsert(Read<UpsertDto>(payload));
@@ -212,7 +213,7 @@ public sealed class BridgeDispatcher
         };
     }
 
-    private static BridgeProject Project(ProjectModel p) => new(p.Id, p.Name, p.Order, p.IsSystem, p.ShowInTabs);
+    private static BridgeProject Project(ProjectModel p) => new(p.Id, p.Name, p.Order, p.IsSystem, p.ShowInTabs, p.ParentId);
 
     private object Upsert(UpsertDto d)
     {
@@ -278,7 +279,8 @@ public sealed class BridgeDispatcher
     }
 
     // ---- request shapes (camelCase from the page)
-    private sealed class NameRequest { public string Name { get; set; } = ""; }
+    private sealed class NameRequest { public string Name { get; set; } = ""; public string? ParentId { get; set; } }
+    private sealed class MoveProjectRequest { public string Id { get; set; } = ""; public string? ParentId { get; set; } }
     private sealed class RenameRequest { public string Id { get; set; } = ""; public string Name { get; set; } = ""; }
     private sealed class ProviderRequest { public string Provider { get; set; } = ""; }
     private sealed class KeyRequest { public string Key { get; set; } = ""; }
