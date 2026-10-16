@@ -9,6 +9,7 @@ import { TransformationsDialog } from "./components/TransformationsDialog";
 import { TrashView } from "./components/TrashView";
 import { LockScreen, PasswordDialog } from "./components/PasswordParts";
 import { Fold } from "./components/Fold";
+import { calculate, formatResult, trailingExpression } from "./calc";
 import { parseAiAnalysis } from "./aiAnalysis";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BlockNoteView } from "@blocknote/mantine";
@@ -1729,6 +1730,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     { id: "properties", label: activeInspector === "properties" ? "Закрыть свойства" : "Открыть свойства", hint: "Свойства текущей заметки", keywords: "свойства метка папка", icon: ChevronDown, disabled: !activeDoc, run: () => setActiveInspector((current) => current === "properties" ? null : "properties") },
     { id: "rename", label: "Переименовать заметку", hint: "Изменить название", keywords: "переименовать название", icon: Pencil, disabled: !activeDoc, run: () => activeDoc && setFormDialog({ kind: "rename", title: "Переименовать заметку", value: activeDoc.title, hint: "Название заметки" }) },
     { id: "move", label: "Переместить заметку", hint: "Выбрать проект", keywords: "переместить папка проект", icon: FolderInput, disabled: !activeDoc, run: () => moveActiveNote() },
+    { id: "calc", label: "Вычислить выражение", hint: "12*3,5 → 42 (Alt и =)", keywords: "вычислить посчитать калькулятор формула", icon: ListOrdered, shortcut: "Alt+=", disabled: !activeDoc, run: () => calculateHere() },
+    { id: "exporthtml", label: "Сохранить как страницу HTML", hint: "Файл .html", keywords: "экспорт html страница", icon: ArrowDownToLine, disabled: !activeDoc, run: () => void exportHtml() },
     { id: "datetime", label: "Вставить дату и время", hint: "Как в Блокноте Windows", keywords: "дата время f5 вставить", icon: CalendarClock, shortcut: "F5", disabled: !activeDoc, run: () => insertDateTime() },
     { id: "goto", label: "Перейти к строке", hint: "По номеру строки", keywords: "строка перейти ctrl g", icon: ListOrdered, shortcut: "Ctrl+G", disabled: !activeDoc, run: () => goToLine() },
     { id: "print", label: "Печать", hint: "Распечатать заметку", keywords: "печать принтер ctrl p print pdf", icon: Printer, shortcut: "Ctrl+P", disabled: !activeDoc, run: () => printNote() },
@@ -2024,6 +2027,37 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     const total = flatBlocks(editor.document as unknown as Array<{ id: string; children?: unknown[] }>).length;
     setFormDialog({ kind: "goto", title: "Перейти к строке", value: "", hint: `Номер строки от 1 до ${total}` });
   }, [editor]);
+  /** Alt + =: calculates the selected text or the expression at the end of the line and writes the result after it. */
+  const calculateHere = useCallback(() => {
+    editor.focus();
+    const selected = editor.getSelectedText().trim();
+    const block = editor.getTextCursorPosition().block;
+    const line = blockText((block as { content?: unknown }).content);
+    const expression = selected ? (calculate(selected) !== null ? selected : trailingExpression(selected)) : trailingExpression(line);
+    const value = expression ? calculate(expression) : null;
+    if (!expression || value === null) { setNotice("Не нашёл выражение. Напишите, например, 12*3,5 и нажмите Alt и ="); return; }
+    const result = formatResult(value);
+    if (selected) editor.insertInlineContent([`${selected} = ${result}`]);
+    else {
+      editor.setTextCursorPosition(block, "end");
+      editor.insertInlineContent([/=\s*$/.test(line) ? (/\s$/.test(line) ? result : ` ${result}`) : ` = ${result}`]);
+    }
+    setNotice(`${expression} = ${result}`);
+  }, [editor]);
+  const exportHtml = useCallback(async () => {
+    try {
+      const body = await editor.blocksToFullHTML(editor.document);
+      const title = (activeDoc?.title || "Заметка").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+      const html = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>${title}</title><style>body{font:16px/1.6 "Segoe UI",sans-serif;max-width:760px;margin:40px auto;padding:0 16px;color:#222}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:6px 10px}img{max-width:100%}pre{background:#f4f4f4;padding:12px;overflow:auto}</style></head><body>${body}</body></html>`;
+      const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${(activeDoc?.title || "Заметка").replace(/[<>:"/\|?*]/g, "-")}.html`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setNotice("Заметка сохранена как страница HTML (картинки остаются ссылками на программу)");
+    } catch { setNotice("Не удалось сохранить HTML"); }
+  }, [activeDoc, editor]);
   const printNote = useCallback(() => { if (activeIdRef.current) window.print(); else setNotice("Откройте заметку для печати"); }, []);
   const exportText = useCallback(() => {
     const text = (activeId && contents[activeId] ? blocksToText(contents[activeId] as LooseBlock[]) : "").replace(/\n/g, "\r\n");
@@ -2035,8 +2069,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     URL.revokeObjectURL(url);
     setNotice("Заметка сохранена как текстовый файл");
   }, [activeDoc, activeId, contents]);
-  const actionsRef = useRef({ insertDateTime, goToLine, printNote });
-  actionsRef.current = { insertDateTime, goToLine, printNote };
+  const actionsRef = useRef({ insertDateTime, goToLine, printNote, calculateHere });
+  actionsRef.current = { insertDateTime, goToLine, printNote, calculateHere };
 
   jumpToBlockRef.current = jumpToBlock;
   const exportMarkdown = useCallback(async () => {
@@ -2210,6 +2244,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   useEffect(() => {
     const keyHandler = (event: KeyboardEvent) => {
       if (event.key === "F11") { event.preventDefault(); setFocusMode((v) => !v); return; }
+      if (event.altKey && !event.ctrlKey && !event.shiftKey && (event.code === "Equal" || event.code === "NumpadAdd")) { event.preventDefault(); actionsRef.current.calculateHere(); return; }
       if (event.key === "F5" && !event.ctrlKey) { event.preventDefault(); actionsRef.current.insertDateTime(); return; }
       if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.code === "KeyG") { event.preventDefault(); actionsRef.current.goToLine(); return; }
       if (event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) { event.preventDefault(); goHistoryRef.current(event.key === "ArrowLeft" ? -1 : 1); return; }
@@ -2508,9 +2543,11 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
                 {activeDoc?.sourcePath && isHosted() && <button onClick={() => void toggleWriteThrough()} title={activeDoc.sourcePath}><FileText size={14} />{activeDoc.writeThrough ? "Не сохранять в файл" : "Сохранять в файл"}<small className="menu-hint">{activeDoc.sourcePath.split(/[\\/]/).pop()}</small></button>}
                 <button disabled={!activeDoc} onClick={exportText}><ArrowDownToLine size={14} />Сохранить как текст (.txt)</button>
                 <button onClick={exportMarkdown}><ArrowDownToLine size={14} />Экспорт в Markdown</button>
+                <button disabled={!activeDoc} onClick={() => void exportHtml()}><ArrowDownToLine size={14} />Сохранить как страницу HTML</button>
                 <button disabled={!activeDoc} onClick={printNote}><Printer size={14} />Печать…<kbd className="menu-key">Ctrl+P</kbd></button>
                 <div className="note-toolbar-menu-divider" />
                 <button disabled={!activeDoc} onClick={insertDateTime}><CalendarClock size={14} />Вставить дату и время<kbd className="menu-key">F5</kbd></button>
+                <button disabled={!activeDoc} onClick={calculateHere}><ListOrdered size={14} />Вычислить выражение<kbd className="menu-key">Alt+=</kbd></button>
                 <button disabled={!activeDoc} onClick={goToLine}><ListOrdered size={14} />Перейти к строке…<kbd className="menu-key">Ctrl+G</kbd></button>
                 <div className="note-toolbar-menu-divider" />
                 <button disabled={!activeDoc || !isHosted()} onClick={() => void openHistory()}><Clock3 size={14} />История версий…</button>
@@ -2707,7 +2744,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
             <div className="status-left">
               <span className={`status-save is-${saveState}`} role="status" aria-live="polite" title={savedAt}>{saveState === "saved" ? <Check size={14} aria-hidden="true" /> : saveState === "saving" ? <LoaderCircle size={14} className="ai-spinner" aria-hidden="true" /> : <CircleAlert size={14} aria-hidden="true" />}{saveState === "saved" ? "Сохранено" : saveState === "saving" ? "Сохраняется…" : "Не сохранено"}{saveState === "error" && <small>{savedAt.replace(/^Не сохранено:?\s*/i, "").slice(0, 70)}</small>}</span>
               {activeDoc?.modifiedAt && <><span className="status-divider" aria-hidden="true">·</span><span className="status-modified" title="Когда заметку изменили в последний раз">Изменено {new Date(activeDoc.modifiedAt).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span></>}
-              {activeDoc && backlinkCount > 0 && <><span className="status-divider" aria-hidden="true">·</span><button className="status-links" title="Заметки, которые ссылаются на эту: показать" onClick={() => { const panel = document.querySelector<HTMLDetailsElement>(".links-panel"); if (panel) { panel.open = true; panel.scrollIntoView({ block: "center", behavior: "smooth" }); } }}><Link2 size={13} aria-hidden="true" />Обратных ссылок: {backlinkCount}</button></>}
+              {activeDoc && backlinkCount > 0 && <><span className="status-divider" aria-hidden="true">·</span><button className="status-links" title="Заметки, которые ссылаются на эту: показать" onClick={() => { const panel = document.querySelector<HTMLDetailsElement>(".links-panel"); if (panel) { panel.open = true; panel.scrollIntoView({ block: "center", behavior: "smooth" }); } }}><Link2 size={13} aria-hidden="true" />Ссылок на заметку: {backlinkCount}</button></>}
               {activeDoc && noteTagList.length > 0 && <><span className="status-divider" aria-hidden="true">·</span>
               <span className="status-tags" title="Метки заметки"><Hash size={13} aria-hidden="true" />{noteTagList.map((tag) => <span key={tag} className="status-tag">{tag}</span>)}</span></>}
             </div>

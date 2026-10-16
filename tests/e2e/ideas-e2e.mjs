@@ -93,7 +93,7 @@ try {
   // ---- backlinks in the bottom line
   await page.locator(".notes-list button", { hasText: "Цель" }).first().click();
   await sleep(700);
-  check("the bottom line counts the notes that link here", /Обратных ссылок: 1/.test(await page.locator(".statusbar").innerText()), (await page.locator(".statusbar").innerText()).replace(/\s+/g, " ").slice(0, 120));
+  check("the bottom line counts the notes that link here", /Ссылок на заметку: 1/.test(await page.locator(".statusbar").innerText()), (await page.locator(".statusbar").innerText()).replace(/\s+/g, " ").slice(0, 120));
 
   // ---- the search results: counts, highlighted words, up to three snippets of a note (idea of the Notebook Navigator)
   await page.getByRole("button", { name: "Поиск заметок и команд" }).click();
@@ -279,6 +279,23 @@ try {
   check("Shift + click picks a range", /Выбрано: \d+/.test(await page.locator(".bulk-bar strong").innerText().catch(() => "")));
   await page.getByRole("button", { name: "Снять выбор" }).click();
   check("the bulk bar closes", (await page.locator(".bulk-bar").count()) === 0);
+
+  // ---- ideas of the third analogue (SingularityApp roadmap): calculation in the text, HTML export, block drag handle
+  await page.locator(".bn-editor").first().click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Итого: 12*3,5");
+  await page.keyboard.press("Alt+Equal");
+  await sleep(400);
+  check("Alt + = writes the result of the expression after it", /Итого: 12\*3,5 = 42/.test(await page.locator(".bn-editor").first().innerText()), (await page.locator(".bn-editor").first().innerText()).slice(-60));
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("(2+3)*4 =");
+  await page.keyboard.press("Alt+Equal");
+  await sleep(400);
+  check("an expression that already ends with '=' gets only the number", /\(2\+3\)\*4 = 20/.test(await page.locator(".bn-editor").first().innerText()));
+  await page.locator("summary[aria-label='Дополнительные действия заметки']").click();
+  check("the note menu offers the HTML page", (await page.locator(".note-menu .note-toolbar-menu").getByRole("button", { name: /Сохранить как страницу HTML/ }).count()) === 1);
+  await page.keyboard.press("Escape");
 } catch (e) {
   check("scenario completed without exceptions", false, String(e.message ?? e).split("\n").slice(0, 5).join(" | "));
 } finally {
