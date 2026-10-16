@@ -350,6 +350,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const [dense, setDense] = useState(() => { try { return window.localStorage.getItem("nh4-dense") === "1"; } catch { return false; } });
   useEffect(() => { try { window.localStorage.setItem("nh4-closed-projects", JSON.stringify(closedProjects)); window.localStorage.setItem("nh4-sub-notes", subNotes ? "1" : "0"); window.localStorage.setItem("nh4-dense", dense ? "1" : "0"); } catch { /* optional */ } }, [closedProjects, subNotes, dense]);
   const [focusMode, setFocusMode] = useState(false);
+  const [flashFolder, setFlashFolder] = useState<string | null>(null);   // the project that just received a note or a project: a short highlight
   const [pwDialog, setPwDialog] = useState<null | { kind: "set" | "remove"; id: string; title: string }>(null);
   const lastActivityRef = useRef(Date.now());
   const [picked, setPicked] = useState<string[]>([]);          // several notes chosen in the list (Ctrl or Shift + click)
@@ -884,6 +885,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     if ((parents[name] ?? "") === parent) return;
     setParents((current) => { const next = { ...current }; if (parent) next[name] = parent; else delete next[name]; return next; });
     if (parent) setClosedProjects((current) => current.filter((x) => x !== parent));
+    if (parent) { setFlashFolder(parent); window.setTimeout(() => setFlashFolder((v) => v === parent ? null : v), 260); }
     setNotice(parent ? `Проект «${name}» вложен в «${parent}»` : `Проект «${name}» теперь на верхнем уровне`);
   }, [parents]);
 
@@ -2393,6 +2395,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     const movingIds = new Set(moving.map((doc) => doc.id));
     setDocs((current) => current.map((doc) => movingIds.has(doc.id) ? { ...doc, folder: target, archived: false } : doc));
     setPicked([]);
+    setFlashFolder(target); window.setTimeout(() => setFlashFolder((v) => v === target ? null : v), 260);
     setNotice(moving.length === 1 ? `Заметка «${moving[0].title}» перемещена в «${target}»` : `Заметок перемещено в «${target}»: ${moving.length}`);
   };
   const archiveNotes = (ids: string[]) => {
@@ -2532,7 +2535,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
               const scope = subNotes ? projectScope(name, parents) : new Set([name]);
               const count = docs.filter((doc) => scope.has(doc.folder) && !doc.deletedAt && !doc.archived).length;
               const open = !closedProjects.includes(name);
-              return <div key={name} className={`folder-item${dropTarget === name ? " is-drop" : ""}${dragProject === name ? " is-dragged" : ""}`} style={{ paddingLeft: depth * 14 }} data-depth={depth}
+              return <div key={name} className={`folder-item${flashFolder === name ? " is-flash" : ""}${dropTarget === name ? " is-drop" : ""}${dragProject === name ? " is-dragged" : ""}`} style={{ paddingLeft: depth * 14 }} data-depth={depth}
                 draggable={!system}
                 onDragStart={(event) => { if (system) return; event.dataTransfer.setData("text/plain", name); event.dataTransfer.effectAllowed = "move"; setDragProject(name); }}
                 onDragEnd={() => { setDragProject(null); setDropTarget(null); }}
@@ -2846,7 +2849,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         <button role="menuitem" onClick={() => { const id = tabMenu.id; setTabMenu(null); setSecondId(id); }}>Открыть справа (две заметки)</button>
         <button role="menuitem" className="destructive-action" onClick={() => requestTrash(tabMenu.id)}><Trash2 size={14} />В корзину…</button>
       </div></div>}
-      {notice && <div className="toast"><Check size={15} />{notice}{toastAction && <button type="button" className="toast-action" onClick={() => { const run = toastAction.run; setToastAction(null); run(); }}>{toastAction.label}</button>}</div>}
+      {notice && <div className="toast" style={toastAction ? ({ "--toast-ms": "9000ms" } as React.CSSProperties) : undefined}><Check size={15} />{notice}{toastAction && <button type="button" className="toast-action" onClick={() => { const run = toastAction.run; setToastAction(null); run(); }}>{toastAction.label}</button>}</div>}
     </div>
   );
 }

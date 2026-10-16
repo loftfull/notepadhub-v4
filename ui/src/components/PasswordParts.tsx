@@ -6,13 +6,14 @@ export function LockScreen({ title, onUnlock }: { title: string; onUnlock: (pass
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [attempt, setAttempt] = useState(0);   // a new key restarts the error animation
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!password || busy) return;
     setBusy(true); setError("");
     const problem = await onUnlock(password);
     setBusy(false);
-    if (problem) { setError(problem); setPassword(""); }
+    if (problem) { setError(problem); setPassword(""); setAttempt((n) => n + 1); }
   };
   return (
     <form className="lock-screen" role="group" aria-label="Заметка защищена паролем" onSubmit={(event) => void submit(event)}>
@@ -20,7 +21,7 @@ export function LockScreen({ title, onUnlock }: { title: string; onUnlock: (pass
       <h2>Заметка защищена паролем</h2>
       <p>«{title}». Текст зашифрован и откроется после ввода пароля.</p>
       <input type="password" autoFocus autoComplete="off" aria-label="Пароль заметки" placeholder="Пароль" value={password} onChange={(event) => setPassword(event.target.value)} />
-      {error && <p className="lock-error" role="alert">{error}</p>}
+      {error && <p key={attempt} className="lock-error" role="alert">{error}</p>}
       <button type="submit" className="form-submit" disabled={!password || busy}>{busy ? "Проверяем…" : "Открыть"}</button>
     </form>
   );
