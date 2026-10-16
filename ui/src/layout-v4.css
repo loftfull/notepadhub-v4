@@ -720,3 +720,34 @@
 .app-shell .outline-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 1px; }
 .app-shell .outline-list button { display: block; width: 100%; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font: inherit; font-size: 13px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .app-shell .outline-list button:hover { background: var(--surface-hover); color: var(--accent-strong); }
+.app-shell .search-result mark { background: color-mix(in srgb, #f5c542 55%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+.app-shell .search-title-line { display: flex; align-items: center; gap: 8px; }
+.app-shell .search-matches { margin-left: auto; padding: 0 7px; border-radius: 9px; background: var(--surface-hover); color: var(--ink-soft); font-style: normal; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.app-shell .search-result .search-snippet { display: block; white-space: normal; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; padding-left: 8px; border-left: 2px solid var(--line-strong); color: var(--ink-soft); -webkit-line-clamp: 2; -webkit-box-orient: vertical; display: -webkit-box; }
+
+/* calendar of the notes list (idea of the Notebook Navigator): the days with notes are marked, a click shows the notes of that day */
+.app-shell .day-chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border: 0; border-radius: 10px; background: var(--accent-soft); color: var(--accent-strong); font: inherit; font-size: 11.5px; cursor: pointer; }
+.app-shell .calendar-pop { position: fixed; left: 16px; top: 190px; right: auto; width: 268px; padding: 10px; display: grid; gap: 8px; }
+.app-shell .calendar-head { display: flex; align-items: center; justify-content: space-between; }
+.app-shell .calendar-head strong { font-size: 13px; text-transform: capitalize; }
+.app-shell .calendar-head button, .app-shell .calendar-foot button { display: grid; place-items: center; min-width: 28px; height: 28px; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer; }
+.app-shell .calendar-head button:hover, .app-shell .calendar-foot button:hover { background: var(--surface-hover); }
+.app-shell .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; }
+.app-shell .calendar-dow { font-size: 11px; color: var(--ink-quiet); padding: 2px 0; }
+.app-shell .calendar-day { position: relative; height: 30px; border: 0; border-radius: 7px; background: transparent; color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer; }
+.app-shell .calendar-day.is-other { color: var(--ink-quiet); opacity: .55; }
+.app-shell .calendar-day:hover { background: var(--surface-hover); }
+.app-shell .calendar-day.is-today { outline: 1px solid var(--accent); }
+.app-shell .calendar-day.is-selected { background: var(--accent); color: #fff; }
+.app-shell .calendar-day.has-notes i { position: absolute; left: 50%; bottom: 3px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--accent); }
+.app-shell .calendar-day.is-selected i { background: #fff; }
+.app-shell .calendar-foot { display: flex; gap: 4px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 6px; }
+.app-shell .calendar-pop .calendar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.app-shell .calendar-pop .calendar-head strong { flex: 1; text-align: center; white-space: nowrap; }
+.app-shell .calendar-pop .calendar-head button { width: 30px; flex: 0 0 30px; padding: 0; }
+.app-shell .calendar-pop .calendar-foot { display: flex; flex-direction: row; flex-wrap: wrap; gap: 4px; }
+.app-shell .calendar-pop .calendar-foot button { width: auto; flex: 0 0 auto; padding: 0 10px; border: 1px solid var(--line-strong); background: var(--surface); }
+.app-shell .calendar-pop .calendar-day { width: 100%; display: grid; place-items: center; padding: 0; }
+.app-shell .search-result > span { align-items: stretch !important; width: 100%; }
+.app-shell .search-result > span > small { text-align: left; align-self: flex-start; }
+.app-shell .search-result .search-title-line { width: 100%; }

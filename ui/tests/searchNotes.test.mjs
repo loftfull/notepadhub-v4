@@ -33,3 +33,14 @@ test("every word must match (AND), tags are searched", () => {
 test("empty query lists notes by recent use", () => {
   assert.deepEqual(searchNotes(docs, contents, {}, "").map((h) => h.doc.id), ["2", "1"]);
 });
+
+test("a note gets up to three different snippets and a match count; splitHighlight marks the words", async () => {
+  const { searchNotes: search, splitHighlight } = await import(pathToFileURL(out).href);
+  const long = para("Кошки спят. " + "слово ".repeat(40) + " Кошки охотятся. " + "слово ".repeat(40) + " Кошки едят.");
+  const hits = search([{ id: "9", title: "Звери", lastOpenedAt: 1 }], { 9: long }, {}, "кошки");
+  assert.equal(hits[0].snippets.length, 3);
+  assert.equal(hits[0].matches, 3);
+  const parts = splitHighlight("Кошки спят, кошки едят", "кошки");
+  assert.deepEqual(parts.filter((p) => p.hit).map((p) => p.text), ["Кошки", "кошки"]);
+  assert.equal(parts.map((p) => p.text).join(""), "Кошки спят, кошки едят");
+});

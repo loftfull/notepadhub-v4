@@ -94,6 +94,31 @@ try {
   await page.locator(".notes-list button", { hasText: "Цель" }).first().click();
   await sleep(700);
   check("the bottom line counts the notes that link here", /Обратных ссылок: 1/.test(await page.locator(".statusbar").innerText()), (await page.locator(".statusbar").innerText()).replace(/\s+/g, " ").slice(0, 120));
+
+  // ---- the search results: counts, highlighted words, up to three snippets of a note (idea of the Notebook Navigator)
+  await page.getByRole("button", { name: "Поиск заметок и команд" }).click();
+  await page.locator("#global-search").fill("заметка");
+  await page.locator(".search-result").first().waitFor({ timeout: 5000 });
+  const head = await page.locator(".search-results-label").innerText();
+  check("the search says how many matches in how many notes", /Найдено: \d+ совпад\S* в \d+ замет/.test(head), head.replace(/\s+/g, " "));
+  check("the matched words are highlighted and every result has its match count", (await page.locator(".search-result mark").count()) >= 1 && (await page.locator(".search-result .search-matches").count()) >= 1);
+  await page.keyboard.press("Escape");
+
+  // ---- calendar: days with notes are marked, a day shows its notes; one button folds all the groups
+  await page.getByRole("button", { name: "Свернуть или развернуть все группы" }).click();
+  await sleep(300);
+  check("one button folds all the date groups", (await page.locator(".notes-group button[aria-expanded='true']").count()) === 0 && (await page.locator(".notes-group").count()) >= 2);
+  await page.getByRole("button", { name: "Свернуть или развернуть все группы" }).click();
+  await page.getByRole("button", { name: "Календарь: заметки по дням" }).click();
+  await page.locator(".calendar-pop").waitFor({ timeout: 5000 });
+  check("today is marked in the calendar and has notes", (await page.locator(".calendar-day.is-today.has-notes").count()) === 1);
+  await page.locator(".calendar-day.is-today").click();
+  await sleep(500);
+  const dayNames = await page.locator(".notes-list .note-name").allInnerTexts();
+  check("a click on a day lists the notes changed on that day, from every project", await page.locator(".day-chip").count() === 1 && dayNames.includes("Цель") && dayNames.includes("Третья") && !dayNames.includes(".env"), JSON.stringify(dayNames.slice(0, 5)));
+  await page.locator(".day-chip").click();
+  await sleep(300);
+  check("the chip clears the day filter", (await page.locator(".day-chip").count()) === 0);
 } catch (e) {
   check("scenario completed without exceptions", false, String(e.message ?? e).split("\n").slice(0, 5).join(" | "));
 } finally {

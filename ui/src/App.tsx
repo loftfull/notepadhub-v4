@@ -14,7 +14,7 @@ import { useCreateBlockNote } from "@blocknote/react";
 import { ru } from "@blocknote/core/locales";
 import type { PartialBlock } from "@blocknote/core";
 import {
-  AlignLeft, Archive, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpDown, ExternalLink, Link2, Replace, ChevronLeft, ChevronRight, CircleAlert, Minus, Settings, Star, Check, ChevronDown, Clock3, Command, Copy, Download, FileText,
+  AlignLeft, Archive, CalendarDays, ChevronsUpDown, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpDown, ExternalLink, Link2, Replace, ChevronLeft, ChevronRight, CircleAlert, Minus, Settings, Star, Check, ChevronDown, Clock3, Command, Copy, Download, FileText,
   Folder, FolderInput, FolderOpen, Hash, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Columns2, ImagePlus, LoaderCircle, Redo2, Tag, Wand2, RotateCcw, Search, Undo2,
   Sparkles, Sun, Trash2, X, Eye, Pin, PinOff, List, Ellipsis, Info,
 } from "lucide-react";
@@ -23,7 +23,7 @@ import { AiAssistantPanel } from "./components/AiAssistantPanel";
 import { FindBar, type FindHost } from "./components/FindBar";
 import { FindAndReplace } from "@tiptap/extension-find-and-replace";
 import { WikiLinks } from "./wikiLinkExtension";
-import { searchNotes } from "./searchNotes";
+import { searchNotes, splitHighlight } from "./searchNotes";
 import { checkProposal, cleanModelText } from "./aiChecks";
 import { outputTokensFor } from "./aiLimits";
 import { matchShortcut, SHORTCUT_HELP } from "./shortcuts";
@@ -89,6 +89,11 @@ function dateGroup(ts: number | undefined, now: number): (typeof NOTE_GROUPS)[nu
   const day = 24 * 60 * 60 * 1000;
   return ts >= start ? NOTE_GROUPS[0] : ts >= start - day ? NOTE_GROUPS[1] : ts >= start - 6 * day ? NOTE_GROUPS[2] : ts >= start - 29 * day ? NOTE_GROUPS[3] : NOTE_GROUPS[4];
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const startOfDay = (ts: number) => { const d = new Date(ts); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+const MONTHS_RU = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+const MONTHS_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
 
 const AUTO_NAME = /^Заметка \d+$/;
 /** The next automatic name: "Заметка N", N = the count of live automatically named notes + 1. */
@@ -345,6 +350,9 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const [notesSort, setNotesSort] = useState<"modified" | "title">(() => { try { return window.localStorage.getItem("nh4-notes-sort") === "title" ? "title" : "modified"; } catch { return "modified"; } });
   const [notesPreview, setNotesPreview] = useState(() => { try { return window.localStorage.getItem("nh4-notes-preview") === "1"; } catch { return false; } });
   const [closedGroups, setClosedGroups] = useState<string[]>([]);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); });
+  const [dayFilter, setDayFilter] = useState<number | null>(null);   // the notes list shows the notes changed on this day
   const navStackRef = useRef<string[]>([]);
   const navPosRef = useRef(-1);
   const navSilentRef = useRef(false);
@@ -402,10 +410,13 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     if (noteView === "archive") return Boolean(doc.archived);
     if (noteView === "pinned") return Boolean(doc.pinned);
     if (noteView === "recent") return typeof doc.lastOpenedAt === "number" && !doc.archived;
+    if (dayFilter !== null) { const t = doc.modifiedAt ?? 0; return !doc.archived && t >= dayFilter && t < dayFilter + DAY_MS; }
     return !doc.archived && doc.folder === folder;
   }).sort((left, right) => noteView === "recent" || noteView === "pinned"
       ? (right.lastOpenedAt ?? 0) - (left.lastOpenedAt ?? 0)
       : 0);
+  const dayCounts = new Map<number, number>();
+  for (const doc of docs) { if (doc.deletedAt || !doc.modifiedAt) continue; const day = startOfDay(doc.modifiedAt); dayCounts.set(day, (dayCounts.get(day) ?? 0) + 1); }
   const listNow = Date.now();
   const listDocs = noteView === "recent" || noteView === "pinned" ? filteredDocs
     : [...filteredDocs].sort((a, b) => notesSort === "title" ? a.title.localeCompare(b.title, "ru") : (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0));
@@ -465,7 +476,9 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     [showSearch, query, docs, contents, tags],
   );
   const searchResults = useMemo(() => searchHits.map((hit) => hit.doc), [searchHits]);
-  const searchSnippets = useMemo(() => new Map(searchHits.map((hit) => [hit.doc.id, hit.snippet])), [searchHits]);
+  const searchHitById = useMemo(() => new Map(searchHits.map((hit) => [hit.doc.id, hit])), [searchHits]);
+  const searchTotal = useMemo(() => searchHits.reduce((sum, hit) => sum + hit.matches, 0), [searchHits]);
+  const markWords = (text: string) => splitHighlight(text, query).map((part, index) => part.hit ? <mark key={index}>{part.text}</mark> : <Fragment key={index}>{part.text}</Fragment>);
   // a service whose model list cannot be loaded still works when the owner types the model name
   const selectedModel = aiModels.find((model) => model.id === aiModel) ?? (aiProvider === "compat" && aiModel.trim() ? { id: aiModel.trim(), name: aiModel.trim(), free: false } : undefined);
   const activeCursorBlock = activeId ? editor.getTextCursorPosition().block : undefined;
@@ -2241,7 +2254,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
               : <>
                 <div className="search-scrim" onMouseDown={() => { setShowSearch(false); setQuery(""); setSelectedSearchIndex(0); window.setTimeout(restoreSearchFocus, 0); }} />
                 <div className="search-field" role="search"><Search size={16} /><input id="global-search" role="combobox" aria-expanded="true" aria-controls="search-listbox" aria-autocomplete="list" aria-activedescendant={`search-opt-${selectedSearchIndex}`} value={query} onChange={(event) => { setQuery(event.target.value); setSelectedSearchIndex(0); }} onKeyDown={handleSearchKeyDown} placeholder="Поиск заметок… Введите &gt; для команд" autoComplete="off" aria-label="Поиск заметок и команд" /><kbd>Esc</kbd></div>
-                <div className="search-modal" role="dialog" aria-label="Результаты поиска" tabIndex={0}><div className="search-results-label" id="search-title">{commandMode ? "Команды" : "Глобальный поиск · заметки"}<small>{commandMode ? "Введите название команды или рецепта" : "Введите > для команд"}</small></div>{commandMode ? <div id="search-listbox" role="listbox" aria-label="Результаты команд">{visibleCommands.map((command, index) => { const Icon = command.icon; return <button key={command.id} id={`search-opt-${index}`} tabIndex={-1} role="option" disabled={command.disabled} className="search-result command-result" aria-selected={index === selectedSearchIndex} onMouseEnter={() => setSelectedSearchIndex(index)} onClick={() => { if (command.disabled) return; rememberCommand(command.id); command.run(); setShowSearch(false); setQuery(""); setSelectedSearchIndex(0); window.setTimeout(restoreSearchFocus, 0); }}><Icon size={17} /><span>{command.label}{!commandQuery && recentCommandIds.includes(command.id) && <em className="search-recent">недавно</em>}<small>{command.hint}{command.disabled ? " · недоступно без активной заметки" : ""}</small></span>{command.shortcut && <kbd className="search-shortcut">{command.shortcut}</kbd>}</button>; })}</div> : <div id="search-listbox" role="listbox" aria-label="Результаты заметок">{searchResults.map((doc, index) => <button key={doc.id} id={`search-opt-${index}`} tabIndex={-1} role="option" className="search-result" aria-selected={index === selectedSearchIndex} onMouseEnter={() => setSelectedSearchIndex(index)} onClick={() => chooseSearchResult(doc)}><FileText size={17} /><span>{doc.title}<small>{doc.folder}{doc.archived ? " · Архив" : ""}</small>{searchSnippets.get(doc.id) ? <small className="search-snippet">{searchSnippets.get(doc.id)}</small> : null}</span></button>)}</div>}{(commandMode ? visibleCommands.length === 0 : searchResults.length === 0) && <div className="search-empty">{commandMode ? "Команды не найдены" : "Ничего не найдено"}</div>}<div className="search-modal-footer"><span className="search-count">{commandMode ? `${visibleCommands.length} из ${commandResults.length}` : `${searchResults.length} из ${docs.filter((doc) => !doc.deletedAt).length}`}</span><span><kbd>↵</kbd> открыть</span>      <span><kbd>↑</kbd><kbd>↓</kbd> перемещение</span><span><kbd>&gt;</kbd> команды и рецепты</span><span><kbd>Esc</kbd> закрыть</span></div></div>
+                <div className="search-modal" role="dialog" aria-label="Результаты поиска" tabIndex={0}><div className="search-results-label" id="search-title">{commandMode ? "Команды" : "Глобальный поиск · заметки"}<small>{commandMode ? "Введите название команды или рецепта" : query.trim() && searchResults.length > 0 ? `Найдено: ${searchTotal} ${plural(searchTotal, ["совпадение", "совпадения", "совпадений"])} в ${searchResults.length} ${plural(searchResults.length, ["заметке", "заметках", "заметках"])}` : "Введите > для команд"}</small></div>{commandMode ? <div id="search-listbox" role="listbox" aria-label="Результаты команд">{visibleCommands.map((command, index) => { const Icon = command.icon; return <button key={command.id} id={`search-opt-${index}`} tabIndex={-1} role="option" disabled={command.disabled} className="search-result command-result" aria-selected={index === selectedSearchIndex} onMouseEnter={() => setSelectedSearchIndex(index)} onClick={() => { if (command.disabled) return; rememberCommand(command.id); command.run(); setShowSearch(false); setQuery(""); setSelectedSearchIndex(0); window.setTimeout(restoreSearchFocus, 0); }}><Icon size={17} /><span>{command.label}{!commandQuery && recentCommandIds.includes(command.id) && <em className="search-recent">недавно</em>}<small>{command.hint}{command.disabled ? " · недоступно без активной заметки" : ""}</small></span>{command.shortcut && <kbd className="search-shortcut">{command.shortcut}</kbd>}</button>; })}</div> : <div id="search-listbox" role="listbox" aria-label="Результаты заметок">{searchResults.map((doc, index) => <button key={doc.id} id={`search-opt-${index}`} tabIndex={-1} role="option" className="search-result" aria-selected={index === selectedSearchIndex} onMouseEnter={() => setSelectedSearchIndex(index)} onClick={() => chooseSearchResult(doc)}><FileText size={17} /><span><span className="search-title-line">{markWords(doc.title)}{(searchHitById.get(doc.id)?.matches ?? 0) > 0 && query.trim() && <em className="search-matches" title="Сколько раз слова запроса встречаются в заметке">{searchHitById.get(doc.id)?.matches}</em>}</span><small>{doc.folder}{doc.archived ? " · Архив" : ""}</small>{query.trim() && (searchHitById.get(doc.id)?.snippets ?? []).map((line, lineIndex) => <small key={lineIndex} className="search-snippet">{markWords(line)}</small>)}</span></button>)}</div>}{(commandMode ? visibleCommands.length === 0 : searchResults.length === 0) && <div className="search-empty">{commandMode ? "Команды не найдены" : "Ничего не найдено"}</div>}<div className="search-modal-footer"><span className="search-count">{commandMode ? `${visibleCommands.length} из ${commandResults.length}` : `${searchResults.length} из ${docs.filter((doc) => !doc.deletedAt).length}`}</span><span><kbd>↵</kbd> открыть</span>      <span><kbd>↑</kbd><kbd>↓</kbd> перемещение</span><span><kbd>&gt;</kbd> команды и рецепты</span><span><kbd>Esc</kbd> закрыть</span></div></div>
               </>}
           </div>
             <details className="note-toolbar-overflow note-menu">
@@ -2279,7 +2292,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
             {folders.map((name) => <button key={name} className={`folder-row${noteView === "folder" && folder === name ? " selected" : ""}`} aria-current={noteView === "folder" && folder === name ? "page" : undefined} onClick={() => handleFolderSelect(name)}><Folder size={16} className="folder-icon" /><span>{name === "Архив" ? "Архив · проект" : name}</span><span className="folder-count">{docs.filter((doc) => doc.folder === name && !doc.deletedAt && !doc.archived).length}</span></button>)}
           </section>
           <section className="nav-section notes-section" aria-label="Заметки раздела">
-            <div className="section-label"><h2>{noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : noteView === "pinned" ? "Избранное" : noteView === "recent" ? "Недавние" : "Заметки"}</h2><span className="notes-tools"><button type="button" className="icon-button tiny" aria-label={notesSort === "modified" ? "Сортировка: по изменению. Нажмите, чтобы сортировать по названию" : "Сортировка: по названию. Нажмите, чтобы сортировать по изменению"} title={notesSort === "modified" ? "Сначала изменённые: нажмите для сортировки по названию" : "По названию: нажмите для сортировки по изменению"} onClick={() => { const next = notesSort === "modified" ? "title" : "modified"; setNotesSort(next); try { window.localStorage.setItem("nh4-notes-sort", next); } catch { /* optional */ } }}><ArrowUpDown size={14} /></button><button type="button" className={`icon-button tiny${notesPreview ? " is-on" : ""}`} aria-pressed={notesPreview} aria-label="Показывать начало текста под названием" title="Начало текста под названием" onClick={() => { const next = !notesPreview; setNotesPreview(next); try { window.localStorage.setItem("nh4-notes-preview", next ? "1" : "0"); } catch { /* optional */ } }}><AlignLeft size={14} /></button><span className="notes-count">{filteredDocs.length}</span></span></div>
+            <div className="section-label"><h2>{noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : noteView === "pinned" ? "Избранное" : noteView === "recent" ? "Недавние" : "Заметки"}</h2><span className="notes-tools">{dayFilter !== null && <button type="button" className="day-chip" title="Показать все заметки проекта" onClick={() => setDayFilter(null)}>{new Date(dayFilter).getDate()} {MONTHS_GEN[new Date(dayFilter).getMonth()]} <X size={11} aria-hidden="true" /></button>}{listGroups.some((g) => g.name) && <button type="button" className="icon-button tiny" aria-label="Свернуть или развернуть все группы" title="Свернуть или развернуть все группы" onClick={() => setClosedGroups((current) => current.length > 0 ? [] : listGroups.map((g) => g.name).filter(Boolean))}><ChevronsUpDown size={14} /></button>}<button type="button" className={`icon-button tiny${dayFilter !== null || calendarOpen ? " is-on" : ""}`} aria-label="Календарь: заметки по дням" aria-expanded={calendarOpen} title="Календарь: заметки по дням" onClick={() => setCalendarOpen((open) => !open)}><CalendarDays size={14} /></button><button type="button" className="icon-button tiny" aria-label={notesSort === "modified" ? "Сортировка: по изменению. Нажмите, чтобы сортировать по названию" : "Сортировка: по названию. Нажмите, чтобы сортировать по изменению"} title={notesSort === "modified" ? "Сначала изменённые: нажмите для сортировки по названию" : "По названию: нажмите для сортировки по изменению"} onClick={() => { const next = notesSort === "modified" ? "title" : "modified"; setNotesSort(next); try { window.localStorage.setItem("nh4-notes-sort", next); } catch { /* optional */ } }}><ArrowUpDown size={14} /></button><button type="button" className={`icon-button tiny${notesPreview ? " is-on" : ""}`} aria-pressed={notesPreview} aria-label="Показывать начало текста под названием" title="Начало текста под названием" onClick={() => { const next = !notesPreview; setNotesPreview(next); try { window.localStorage.setItem("nh4-notes-preview", next ? "1" : "0"); } catch { /* optional */ } }}><AlignLeft size={14} /></button><span className="notes-count">{filteredDocs.length}</span></span></div>
             <ul className="notes-list">
               {listGroups.map((group) => <Fragment key={group.name || "all"}>
                 {group.name && <li className="notes-group"><button type="button" aria-expanded={!closedGroups.includes(group.name)} onClick={() => setClosedGroups((current) => current.includes(group.name) ? current.filter((x) => x !== group.name) : [...current, group.name])}><ChevronDown size={13} className="notes-group-chevron" aria-hidden="true" />{group.name}<small>{group.items.length}</small></button></li>}
@@ -2326,6 +2339,34 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
             </div>
           </details>
         </aside>
+        {calendarOpen && <div className="rail-backdrop" onMouseDown={() => setCalendarOpen(false)}><div className="calendar-pop note-toolbar-menu" role="dialog" aria-label="Календарь" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="calendar-head">
+            <button type="button" aria-label="Предыдущий месяц" onClick={() => setCalendarMonth((m) => new Date(new Date(m).getFullYear(), new Date(m).getMonth() - 1, 1).getTime())}><ChevronLeft size={15} /></button>
+            <strong>{MONTHS_RU[new Date(calendarMonth).getMonth()]} {new Date(calendarMonth).getFullYear()}</strong>
+            <button type="button" aria-label="Следующий месяц" onClick={() => setCalendarMonth((m) => new Date(new Date(m).getFullYear(), new Date(m).getMonth() + 1, 1).getTime())}><ChevronRight size={15} /></button>
+          </div>
+          <div className="calendar-grid" role="grid">
+            {["п", "в", "с", "ч", "п", "с", "в"].map((d, i) => <span key={i} className="calendar-dow">{d}</span>)}
+            {(() => {
+              const first = new Date(calendarMonth);
+              const lead = (first.getDay() + 6) % 7;
+              const cells: React.ReactElement[] = [];
+              for (let i = 0; i < 42; i++) {
+                const day = new Date(first.getFullYear(), first.getMonth(), 1 - lead + i);
+                const ts = day.getTime();
+                const count = dayCounts.get(ts) ?? 0;
+                const other = day.getMonth() !== first.getMonth();
+                cells.push(<button key={i} type="button" className={`calendar-day${other ? " is-other" : ""}${ts === startOfDay(Date.now()) ? " is-today" : ""}${dayFilter === ts ? " is-selected" : ""}${count > 0 ? " has-notes" : ""}`} title={count > 0 ? `Заметок: ${count}` : "Нет заметок"} onClick={() => { setDayFilter(dayFilter === ts ? null : ts); setCalendarOpen(false); }}>{day.getDate()}{count > 0 && <i aria-hidden="true" />}</button>);
+              }
+              return cells;
+            })()}
+          </div>
+          <div className="calendar-foot">
+            <button type="button" onClick={() => { const d = new Date(); setCalendarMonth(new Date(d.getFullYear(), d.getMonth(), 1).getTime()); setDayFilter(startOfDay(Date.now())); setCalendarOpen(false); }}>Сегодня</button>
+            <button type="button" onClick={() => { setCalendarOpen(false); openDailyNote(); }}>Заметка за сегодня</button>
+            {dayFilter !== null && <button type="button" onClick={() => { setDayFilter(null); setCalendarOpen(false); }}>Показать все</button>}
+          </div>
+        </div></div>}
         {railMenu && <div className="rail-backdrop" onMouseDown={() => setRailMenu(null)}><div className="rail-pop note-toolbar-menu" role="menu" aria-label={railMenu === "pinned" ? "Избранные заметки" : "Недавние заметки"} onMouseDown={(event) => event.stopPropagation()}>
           <div className="rail-pop-title">{railMenu === "pinned" ? "Избранное" : "Недавние"}</div>
           {(railMenu === "pinned" ? pinnedDocs : recentDocs).slice(0, 12).map((doc) => <button key={doc.id} role="menuitem" onClick={() => { setNoteView("folder"); setFolder(doc.folder); selectDocument(doc); }}><FileText size={14} aria-hidden="true" /><span>{doc.title}</span></button>)}
