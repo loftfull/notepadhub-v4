@@ -164,3 +164,15 @@
 @media (max-width: 899px) { .app-shell.ai-open .toast { right: 18px; bottom: 80px; } }
 
 .app-shell .ais-send:disabled { opacity: 1; background: var(--surface-hover); color: var(--ink-muted); box-shadow: none; }
+
+/* service data (provider, model, where the text goes) lives in one line at the very bottom of the panel */
+.app-shell .ais-bottom { flex: 0 0 auto; display: flex; flex-direction: column; background: var(--surface); }
+.app-shell .ais-service { position: relative; border-top: 1px solid var(--line); padding: 4px 12px 6px; background: var(--surface-soft); }
+.app-shell .ais-service .ais-model { border: 0; background: transparent; border-radius: 8px; }
+.app-shell .ais-service .ais-model > summary { min-height: 30px; padding: 2px 6px; gap: 8px; }
+.app-shell .ais-service .ais-model-text { flex-direction: row; align-items: baseline; gap: 6px; }
+.app-shell .ais-service .ais-model-text span { max-width: 14ch; }
+.app-shell .ais-service .ais-privacy { flex: 0 0 auto; font-size: 11px; white-space: nowrap; }
+.app-shell .ais-service .ais-model .ai-assistant-settings { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 4px); max-height: min(60vh, 460px); overflow-y: auto; padding: 12px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); box-shadow: 0 -12px 32px rgba(20, 27, 38, .16); z-index: 3; }
+.app-shell .ais-service .ais-model[open] > summary svg:last-of-type { transform: rotate(0deg); }
+.app-shell .ais-composer { padding-bottom: 10px; }

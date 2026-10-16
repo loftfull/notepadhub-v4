@@ -50,7 +50,7 @@ try {
   await page.waitForSelector(".bn-editor", { state: "visible", timeout: 10000 });
   await page.getByRole("button", { name: "Открыть AI-помощник" }).click();
   await page.waitForFunction(() => document.querySelector(".ais-model-text")?.textContent?.includes("Pollinations"), null, { timeout: 20000 }).catch(() => {});
-  const online = await page.evaluate(() => ({ radio: document.querySelector("[role=radio][aria-checked=true]")?.textContent ?? "", chip: document.querySelector(".ais-model-text")?.textContent ?? "" }));
+  const online = await page.evaluate(() => ({ radio: document.querySelector(".ais-service [role=radio][aria-checked=true]")?.textContent ?? "", chip: document.querySelector(".ais-model-text")?.textContent ?? "" }));
   check("the free online service is the default (Pollinations, no key)", online.chip.includes("Pollinations") && online.radio.includes("Онлайн"), JSON.stringify(online));
   await page.getByRole("button", { name: "Закрыть AI-помощник" }).first().click();
   // the rest of the run uses the fake local model

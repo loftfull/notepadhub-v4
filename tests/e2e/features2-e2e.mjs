@@ -175,7 +175,9 @@ try {
 
   // ---- create a picture through the service, then edit it
   const a0 = assetCount();
-  await page.locator("summary[aria-label='Изображения: создать или править']").click();
+  if (!(await page.getByRole("button", { name: "Закрыть AI-помощник" }).count())) await page.getByRole("button", { name: "Открыть AI-помощник" }).click();   // pictures live in the AI panel
+  check("picture tools are in the AI panel and not in the top bar", (await page.locator(".ai-studio").getByRole("button", { name: /Создать изображение/ }).count()) === 1 && (await page.locator(".topbar").getByText(/изображени/i).count()) === 0);
+  check("service data (provider, model, privacy) is one line at the very bottom of the AI panel, below the input", await page.evaluate(() => { const panel = document.querySelector(".ai-studio"); const svc = panel?.querySelector(".ais-service"); const input = panel?.querySelector("#ais-instruction"); if (!svc || !input) return false; return svc.getBoundingClientRect().top >= input.getBoundingClientRect().bottom && Math.abs(panel.getBoundingClientRect().bottom - svc.getBoundingClientRect().bottom) < 4; }));
   await page.getByRole("button", { name: /Создать изображение/ }).first().click();
   await page.waitForSelector("#img-gen-title", { timeout: 10000 });
   await page.locator(".image-modal textarea").fill("акварельная кошка на подоконнике");
@@ -190,7 +192,7 @@ try {
   const imgs = await page.evaluate(() => [...document.querySelectorAll(".bn-editor img")].map((n) => n.getAttribute("src")));
   check("the picture is in the sheet, shown from the host's own address", imgs.length === 1 && imgs[0].startsWith("https://assets.notepadhub.local/"), JSON.stringify(imgs));
 
-  await page.locator("summary[aria-label='Изображения: создать или править']").click();
+  if (!(await page.getByRole("button", { name: "Закрыть AI-помощник" }).count())) await page.getByRole("button", { name: "Открыть AI-помощник" }).click();   // pictures live in the AI panel
   await page.getByRole("button", { name: /Править изображение/ }).first().click();
   await page.waitForSelector("#img-edit-title", { timeout: 10000 });
   await page.waitForSelector(".image-stage canvas", { timeout: 15000 });

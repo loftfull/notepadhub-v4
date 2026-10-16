@@ -2085,16 +2085,6 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
             <button className="icon-button quiet bar-icon" aria-label="Повторить" title="Повторить (Ctrl Y)" disabled={!activeDoc || showPreview} onClick={redoEdit}><Redo2 size={16} /></button>
           </div>
           <span className="tb-sep" aria-hidden="true" />
-          <div className="tb-group" role="group" aria-label="Вставка">
-            <details className="note-toolbar-overflow image-menu">
-              <summary aria-label="Изображения: создать или править" title="Изображения"><ImagePlus size={16} /></summary>
-              <div className="note-toolbar-menu" onClick={noteMenuClose}>
-                <button disabled={!activeDoc || showPreview} onClick={() => openImageDialog("generate")}><ImagePlus size={14} />Создать изображение…</button>
-                <button disabled={!activeDoc || showPreview} onClick={() => openImageDialog("edit")}><ImagePlus size={14} />Править изображение…</button>
-              </div>
-            </details>
-          </div>
-          <span className="tb-sep" aria-hidden="true" />
           <div className="tb-group" role="group" aria-label="Вид">
             <button className={`icon-button quiet bar-icon${secondId ? " is-on" : ""}`} aria-pressed={Boolean(secondId)} aria-label="Две заметки на экране" title="Две заметки рядом: сравнение и перенос выделенного" disabled={!activeDoc || showPreview} onClick={() => { if (secondId) { setSecondId(null); return; } const other = [...openTabs.filter((doc) => doc.id !== activeId), ...docs.filter((doc) => !doc.deletedAt && doc.id !== activeId)].find((doc) => !isPlaceholderNote(doc.id)); if (other) setSecondId(other.id); else setNotice("Нужна ещё одна заметка."); }}><Columns2 size={16} /></button>
             <button ref={previewTriggerRef} className="icon-button quiet bar-icon" aria-pressed={showPreview} aria-label={showPreview ? "Редактировать" : "Предпросмотр"} title={showPreview ? "Вернуться к редактированию" : "Предпросмотр"} onClick={() => setShowPreview((value) => !value)}>{showPreview ? <Pencil size={16} /> : <Eye size={16} />}</button>
@@ -2266,8 +2256,10 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         canRun={Boolean(activeDoc && !activeDoc.deletedAt && aiModel && selectedModel
           && (aiProvider === "ollama" ? aiProviders?.ollama.configured : aiProvider === "compat" ? aiProviders?.compat?.configured : aiProviders?.openrouter.configured)
           && (aiProvider === "ollama" || (aiProvider === "compat" ? (aiRemoteConsent || (aiProviders?.compat?.local && !cloudModelName(aiModel))) : (aiRemoteConsent && (selectedModel.free || estimatedAiCost !== null)))))}
+        onImage={openImageDialog}
+        canImage={Boolean(activeDoc && !activeDoc.deletedAt && !showPreview)}
         canFormat={Boolean(activeDoc && !activeDoc.deletedAt && !showPreview && formatJob === null)}
-        onRun={(operation) => { if (operation === "structure") runAutoFormat(); else void requestAiTask(operation); }}
+        onRun={(operation) => { if (operation === "structure") runAutoFormat(); else if (operation === "custom" && !aiContextText.trim()) { setAiScope("note"); void requestAiTask("custom", { scope: "note" }); } else void requestAiTask(operation); }}
         transformations={transformationList}
         onManageTransformations={() => setTransformationsOpen(true)}
         onAsk={(question) => { setAiScope("note"); void requestAiTask("custom", { scope: "note", instruction: ("Ответь на вопрос по тексту заметки, опираясь только на её содержимое; если в тексте ответа нет, так и скажи. Вопрос: " + question).slice(0, 1000), insightTitle: ("Ответ: " + question).slice(0, 80) }); }}

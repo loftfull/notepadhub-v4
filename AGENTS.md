@@ -9,6 +9,7 @@ Product: Notepad Hub 4, a Windows notes app. Owner writes in Russian: **answer a
 - `tests/NotepadHub.Core.Tests` xunit; `ui/tests` node:test; `tests/e2e/*.mjs` real window via CDP.
 
 ## Rules that matter
+0. **Before moving, adding or regrouping any control, read `docs/OWNER_REQUIREMENTS.md` and check the change against it.** Record every new placement instruction of the owner there the same day, as a dated quote with the test that guards it. A function the owner describes as "by content or request" is an AI function and lives in the AI panel.
 1. `dotnet build` does NOT rebuild the UI. After any change in `ui/`, run `npm run build` first, otherwise the host serves the old page and tests lie.
 2. Never delete or rewrite the owner's data silently. Destructive actions ask first and are undoable; do not swallow errors with empty `catch`.
 3. No new npm/NuGet packages without the owner's decision. Official sources only.

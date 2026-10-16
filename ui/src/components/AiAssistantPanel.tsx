@@ -1,6 +1,6 @@
 import { parseMarkdown, stripMarkdown, type Inline, type MdBlock } from "../aiMarkdown";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, MessageCircleQuestion, Check, ChevronDown, Cloud, Copy, FileSearch, LayoutList, LoaderCircle, Maximize2, Minimize2, PenLine, Shield, Sparkles, SpellCheck, StepForward, TextQuote, X, type LucideIcon } from "lucide-react";
+import { ArrowUp, MessageCircleQuestion, Check, ChevronDown, Cloud, Copy, FileSearch, ImagePlus, LayoutList, LoaderCircle, Maximize2, Minimize2, PenLine, Shield, Sparkles, SpellCheck, StepForward, TextQuote, X, type LucideIcon } from "lucide-react";
 import type { AiCitation, AiModelOption, AiOperation, AiProposal, AiProvider, AiProviderStatus, AiScope } from "../ai";
 import { parseAiAnalysis, type AiAnalysis, type AiAnalysisItem } from "../aiAnalysis";
 import { wordDiff } from "../aiChecks";
@@ -44,6 +44,9 @@ type Props = {
   canRun: boolean;
   /** the note can be laid out (the rules work without any model) */
   canFormat: boolean;
+  /** pictures are an AI function: generate from the note or a request, edit a picture of the note */
+  onImage: (kind: "generate" | "edit") => void;
+  canImage: boolean;
   onRun: (operation: AiOperation) => void;
   transformations: Transformation[];
   onManageTransformations: () => void;
@@ -207,7 +210,7 @@ export function AiAssistantPanel({
   provider, onProviderChange, model, onModelChange, models, modelsLoading, modelsError, hiddenModels, providers,
   scope, linkedTitles, onScopeChange, contextText, instruction, onInstructionChange, writingRule, onWritingRuleChange,
   onSaveWritingRule, consent, onConsentChange, pending, streamText, firstTokenMs, elapsedMs, error,
-  proposal, estimatedCost, canRun, canFormat, onRun, transformations, onManageTransformations, onRunTransformation, onAsk, onCancel, onAccept, onReject, onCitation, onClose, keyManager,
+  proposal, estimatedCost, canRun, canFormat, onImage, canImage, onRun, transformations, onManageTransformations, onRunTransformation, onAsk, onCancel, onAccept, onReject, onCitation, onClose, keyManager,
 }: Props) {
   const [modalMode, setModalMode] = useState(() => window.matchMedia("(max-width: 1199px)").matches);
   const dialogRef = useRef<HTMLElement>(null);
@@ -231,6 +234,8 @@ export function AiAssistantPanel({
   const remoteReady = provider === "ollama" ? true : provider === "compat" ? Boolean(compat?.configured && ((compat.local && !/(^|[-/:])cloud($|[-/:])/i.test(model)) || consent)) : Boolean(consent && providers?.openrouter.configured);
   const canStart = canRun && !pending && remoteReady && Boolean(model) && Boolean(contextText.trim());
   const hasContext = Boolean(contextText.trim());
+  /** a free instruction or a question works on the whole note when nothing is selected, so typing a task never leaves the button dead */
+  const canSend = canRun && !pending && remoteReady && Boolean(model);
   const contextLabel = scope === "selection" ? "Выделение" : scope === "paragraph" ? "текущий абзац" : scope === "linked" ? "заметка и связанные заметки" : "вся заметка";
   const analysis = proposal?.operation === "analyze" ? parseAiAnalysis(proposal.proposedText, proposal.citations) : null;
   const visibleOperations = compactMode ? operations.slice(0, 4) : operations;
@@ -343,56 +348,9 @@ export function AiAssistantPanel({
       </header>
 
       <div className="ais-body">
-        <details className="ais-model ai-advanced-controls">
-          <summary>
-            <span className={`ais-dot ${local ? "is-local" : "is-cloud"}`} aria-hidden="true" />
-            <span className="ais-model-text"><b>{providerLabel}</b><span>{modelLabel}</span></span>
-            <ChevronDown size={15} aria-hidden="true" />
-            <span className="visually-hidden">Настройки AI и модели</span>
-          </summary>
-          <div className="ai-assistant-settings">
-            <div className="ais-field"><span id="ais-provider-label">Где работает модель</span>
-              <div className="ais-seg" role="radiogroup" aria-labelledby="ais-provider-label">
-                <button role="radio" aria-checked={local} className={local ? "is-on" : ""} onClick={() => onProviderChange("ollama")}><Shield size={14} />На компьютере</button>
-                <button role="radio" aria-checked={provider === "openrouter"} className={provider === "openrouter" ? "is-on" : ""} onClick={() => onProviderChange("openrouter")}><Cloud size={14} />OpenRouter</button>
-                <button role="radio" aria-checked={provider === "compat"} className={provider === "compat" ? "is-on" : ""} onClick={() => onProviderChange("compat")}><Cloud size={14} />Онлайн</button>
-              </div>
-            </div>
-            {provider === "compat" && <CompatSettings status={compat} keyManager={keyManager} consent={consent} onConsentChange={onConsentChange} model={model} onModelChange={onModelChange} contextLabel={contextLabel} />}
-            {provider === "openrouter" && (
-              <div className="ai-remote-consent">
-                <p>{providers?.openrouter.configured
-                  ? `Контекст «${contextLabel}» будет отправлен OpenRouter. Перед запуском проверьте точный контекст и цену.`
-                  : (keyManager ? "Ключ OpenRouter не сохранён. Вставьте его ниже: он хранится только на этом компьютере." : "OpenRouter key не настроен. Серверное окружение OPENROUTER_API_KEY отсутствует.")}</p>
-                {keyManager && (
-                  <div className="ai-key-form">
-                    <label><span>Ключ OpenRouter</span><input type="password" autoComplete="off" spellCheck={false} value={keyDraft} onChange={(event) => setKeyDraft(event.target.value)} placeholder="sk-or-…" /></label>
-                    <div className="ai-key-actions">
-                      <button type="button" disabled={keyDraft.trim().length < 16} onClick={() => { void keyManager.onSave(keyDraft.trim()).then(() => { setKeyDraft(""); setKeyMessage("Ключ сохранён."); }).catch((error: unknown) => setKeyMessage(error instanceof Error ? error.message : "Не удалось сохранить ключ.")); }}>Сохранить ключ</button>
-                      {providers?.openrouter.configured && <button type="button" onClick={() => { void keyManager.onClear().then(() => setKeyMessage("Ключ удалён.")).catch((error: unknown) => setKeyMessage(error instanceof Error ? error.message : "Не удалось удалить ключ.")); }}>Удалить ключ</button>}
-                    </div>
-                    {keyMessage && <small role="status">{keyMessage}</small>}
-                  </div>
-                )}
-                {providers?.openrouter.usage && <small className="ais-usage">Облако: сегодня {providers.openrouter.usage.callsToday} из {providers.openrouter.usage.dailyLimit} запросов · в этом месяце ≈${rubleFreeFormatter.format(providers.openrouter.usage.spentMonthUsd)} из ${rubleFreeFormatter.format(providers.openrouter.usage.monthlyBudgetUsd)}</small>}
-                <label className="ais-check"><input type="checkbox" checked={consent} onChange={(event) => onConsentChange(event.target.checked)} /> Разрешить отправку выбранного контекста</label>
-              </div>
-            )}
-            <label className="ais-field">
-              <span>Модель</span>
-              <input aria-label="Фильтр моделей" value={modelQuery} onChange={(event) => setModelQuery(event.target.value)} placeholder="Найти модель…" />
-              <select aria-label="Выбрать модель" value={model} onChange={(event) => onModelChange(event.target.value)} disabled={modelsLoading || models.length === 0}>
-                {visibleModels.map((item) => <option key={item.id} value={item.id}>{item.name}{item.free ? " · free" : ""}</option>)}
-              </select>
-              <small>{modelsLoading ? "Загрузка каталога…" : modelsError || priceLabel || "Модель недоступна"}</small>
-              {provider === "ollama" && hiddenModels.length > 0 && <small className="ais-hidden-models" title={hiddenModels.map((item) => `${item.name}: ${item.reason}`).join(String.fromCharCode(10))}>Скрыто моделей: {hiddenModels.length} (облачные, кодовые, для поиска, устаревшие, слабые). Наведите, чтобы увидеть причины.</small>}
-            </label>
-          </div>
-        </details>
 
         <section className="ais-section" aria-label="Что обработать">
           <div className="ais-label"><span id="ais-scope-label">Что обработать</span>
-            <span className={`ais-privacy ${local ? "is-local" : "is-cloud"}`}>{local ? <Shield size={12} aria-hidden="true" /> : <Cloud size={12} aria-hidden="true" />}{local ? "Остаётся на компьютере" : scope === "linked" ? `Уйдёт в облако: ${linkedTitles.length + 1} заметок` : "Уйдёт в облако"}</span>
           </div>
           <div className="ais-seg ais-seg-wrap" role="radiogroup" aria-labelledby="ais-scope-label">
             {scopeOptions.map((option) => { const noLinks = option.id === "linked" && linkedTitles.length === 0; return <button key={option.id} role="radio" aria-checked={scope === option.id} disabled={noLinks} title={noLinks ? "У этой заметки нет связей: добавьте [[ссылку]] (Ctrl+L)" : option.id === "linked" ? "Заметка и до 5 связанных заметок — только для чтения" : undefined} className={scope === option.id ? "is-on" : ""} onClick={() => onScopeChange(option.id)}>{option.label}</button>; })}
@@ -464,6 +422,14 @@ export function AiAssistantPanel({
           </div>
         </section>
 
+        <section className="ais-section" aria-label="Изображения">
+          <div className="ais-label"><span>Изображения</span><small>по тексту заметки или запросу</small></div>
+          <div className="ais-chips">
+            <button type="button" className="ais-chip" disabled={!canImage} onClick={() => onImage("generate")}><ImagePlus size={14} aria-hidden="true" />Создать изображение…</button>
+            <button type="button" className="ais-chip" disabled={!canImage} onClick={() => onImage("edit")}><ImagePlus size={14} aria-hidden="true" />Править изображение…</button>
+          </div>
+        </section>
+
         <details className="ai-writing-assets ais-assets">
           <summary>Шаблоны и правила письма</summary>
           <label className="ai-writing-rule">
@@ -505,19 +471,70 @@ export function AiAssistantPanel({
         </details>
       </div>
 
-      {!compactMode && (
-        <footer className="ais-composer">
-          <label className="visually-hidden" htmlFor="ais-instruction">Своя инструкция</label>
-          <textarea id="ais-instruction" rows={2} value={instruction} maxLength={1000} onChange={(event) => onInstructionChange(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && canStart && instruction.trim()) { event.preventDefault(); onRun("custom"); } }}
-            placeholder="Своя инструкция: например, перепиши дружелюбно, сохранив факты" />
-          <div className="ais-composer-row">
-            <small>{instruction.length}/1000 · Ctrl+Enter</small>
-            <button className="ais-ask" aria-label="Задать вопрос по заметке" title="Вопрос по заметке: ответ можно вставить в конец заметки отдельным инсайтом (текст заметки не меняется)" disabled={!canStart || !instruction.trim()} onClick={() => onAsk(instruction.trim())}><MessageCircleQuestion size={15} /> Спросить</button>
-            <button className="ais-send" aria-label="Выполнить инструкцию" title="Выполнить инструкцию" disabled={!canStart || !instruction.trim()} onClick={() => onRun("custom")}><ArrowUp size={17} /></button>
+      <div className="ais-bottom">
+        {!compactMode && (
+          <footer className="ais-composer">
+            <label className="visually-hidden" htmlFor="ais-instruction">Своя инструкция</label>
+            <textarea id="ais-instruction" rows={2} value={instruction} maxLength={1000} onChange={(event) => onInstructionChange(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && canSend && instruction.trim()) { event.preventDefault(); onRun("custom"); } }}
+              placeholder="Своя инструкция: например, перепиши дружелюбно, сохранив факты" />
+            <div className="ais-composer-row">
+              <small>{instruction.length}/1000 · Ctrl+Enter</small>
+              <button className="ais-ask" aria-label="Задать вопрос по заметке" title="Вопрос по заметке: ответ можно вставить в конец заметки отдельным инсайтом (текст заметки не меняется)" disabled={!canSend || !instruction.trim()} onClick={() => onAsk(instruction.trim())}><MessageCircleQuestion size={15} /> Спросить</button>
+              <button className="ais-send" aria-label="Выполнить инструкцию" title="Выполнить инструкцию" disabled={!canSend || !instruction.trim()} onClick={() => onRun("custom")}><ArrowUp size={17} /></button>
+            </div>
+          </footer>
+        )}
+        <div className="ais-service" aria-label="Служебные данные: сервис и модель">
+          <details className="ais-model ai-advanced-controls">
+          <summary>
+            <span className={`ais-dot ${local ? "is-local" : "is-cloud"}`} aria-hidden="true" />
+            <span className="ais-model-text"><b>{providerLabel}</b><span>{modelLabel}</span></span>
+            <span className={`ais-privacy ${local ? "is-local" : "is-cloud"}`}>{local ? <Shield size={12} aria-hidden="true" /> : <Cloud size={12} aria-hidden="true" />}{local ? "Остаётся на компьютере" : scope === "linked" ? `Уйдёт в облако: ${linkedTitles.length + 1} заметок` : "Уйдёт в облако"}</span>
+            <ChevronDown size={15} aria-hidden="true" />
+            <span className="visually-hidden">Настройки AI и модели</span>
+          </summary>
+          <div className="ai-assistant-settings">
+            <div className="ais-field"><span id="ais-provider-label">Где работает модель</span>
+              <div className="ais-seg" role="radiogroup" aria-labelledby="ais-provider-label">
+                <button role="radio" aria-checked={local} className={local ? "is-on" : ""} onClick={() => onProviderChange("ollama")}><Shield size={14} />На компьютере</button>
+                <button role="radio" aria-checked={provider === "openrouter"} className={provider === "openrouter" ? "is-on" : ""} onClick={() => onProviderChange("openrouter")}><Cloud size={14} />OpenRouter</button>
+                <button role="radio" aria-checked={provider === "compat"} className={provider === "compat" ? "is-on" : ""} onClick={() => onProviderChange("compat")}><Cloud size={14} />Онлайн</button>
+              </div>
+            </div>
+            {provider === "compat" && <CompatSettings status={compat} keyManager={keyManager} consent={consent} onConsentChange={onConsentChange} model={model} onModelChange={onModelChange} contextLabel={contextLabel} />}
+            {provider === "openrouter" && (
+              <div className="ai-remote-consent">
+                <p>{providers?.openrouter.configured
+                  ? `Контекст «${contextLabel}» будет отправлен OpenRouter. Перед запуском проверьте точный контекст и цену.`
+                  : (keyManager ? "Ключ OpenRouter не сохранён. Вставьте его ниже: он хранится только на этом компьютере." : "OpenRouter key не настроен. Серверное окружение OPENROUTER_API_KEY отсутствует.")}</p>
+                {keyManager && (
+                  <div className="ai-key-form">
+                    <label><span>Ключ OpenRouter</span><input type="password" autoComplete="off" spellCheck={false} value={keyDraft} onChange={(event) => setKeyDraft(event.target.value)} placeholder="sk-or-…" /></label>
+                    <div className="ai-key-actions">
+                      <button type="button" disabled={keyDraft.trim().length < 16} onClick={() => { void keyManager.onSave(keyDraft.trim()).then(() => { setKeyDraft(""); setKeyMessage("Ключ сохранён."); }).catch((error: unknown) => setKeyMessage(error instanceof Error ? error.message : "Не удалось сохранить ключ.")); }}>Сохранить ключ</button>
+                      {providers?.openrouter.configured && <button type="button" onClick={() => { void keyManager.onClear().then(() => setKeyMessage("Ключ удалён.")).catch((error: unknown) => setKeyMessage(error instanceof Error ? error.message : "Не удалось удалить ключ.")); }}>Удалить ключ</button>}
+                    </div>
+                    {keyMessage && <small role="status">{keyMessage}</small>}
+                  </div>
+                )}
+                {providers?.openrouter.usage && <small className="ais-usage">Облако: сегодня {providers.openrouter.usage.callsToday} из {providers.openrouter.usage.dailyLimit} запросов · в этом месяце ≈${rubleFreeFormatter.format(providers.openrouter.usage.spentMonthUsd)} из ${rubleFreeFormatter.format(providers.openrouter.usage.monthlyBudgetUsd)}</small>}
+                <label className="ais-check"><input type="checkbox" checked={consent} onChange={(event) => onConsentChange(event.target.checked)} /> Разрешить отправку выбранного контекста</label>
+              </div>
+            )}
+            <label className="ais-field">
+              <span>Модель</span>
+              <input aria-label="Фильтр моделей" value={modelQuery} onChange={(event) => setModelQuery(event.target.value)} placeholder="Найти модель…" />
+              <select aria-label="Выбрать модель" value={model} onChange={(event) => onModelChange(event.target.value)} disabled={modelsLoading || models.length === 0}>
+                {visibleModels.map((item) => <option key={item.id} value={item.id}>{item.name}{item.free ? " · free" : ""}</option>)}
+              </select>
+              <small>{modelsLoading ? "Загрузка каталога…" : modelsError || priceLabel || "Модель недоступна"}</small>
+              {provider === "ollama" && hiddenModels.length > 0 && <small className="ais-hidden-models" title={hiddenModels.map((item) => `${item.name}: ${item.reason}`).join(String.fromCharCode(10))}>Скрыто моделей: {hiddenModels.length} (облачные, кодовые, для поиска, устаревшие, слабые). Наведите, чтобы увидеть причины.</small>}
+            </label>
           </div>
-        </footer>
-      )}
+        </details>
+        </div>
+      </div>
     </aside>
   );
 }

@@ -13,7 +13,7 @@ export type HostNote = {
   content: string; blocksJson: string | null;
 };
 export type HostSettings = { activeProjectId: string; selectedNoteId: string; theme: "system" | "light" | "dark"; sidebarVisible: boolean };
-export type Bootstrap = { contract: number; hostVersion: string; mode: "host" | "mock"; projects: HostProject[]; notes: HostNote[]; settings: HostSettings };
+export type Bootstrap = { contract: number; hostVersion: string; mode: "host" | "mock"; projects: HostProject[]; notes: HostNote[]; settings: HostSettings };  // honest-ui: browser-only mock when no host is attached; the packaged app never uses it
 export type UpsertNote = {
   id: string; projectId: string; title: string; tags: string; pinned: boolean; archived: boolean; deleted: boolean;
   content?: string; blocksJson?: string;
@@ -96,12 +96,12 @@ function createMock(): Transport {
     id, title, projectId: "inbox", tags: "", createdUtc: now(), updatedUtc: now(), lastOpenedUtc: "", isPinned: false, isArchived: false,
     isDeleted: false, externalOnly: false, legacySourceGuid: "", sourcePath: "", sourceType: "local", contentType: "text", content, blocksJson: null,
   });
-  seed("demo1", "Первая заметка", "# Первая заметка\nЭто демонстрационные данные: хост не подключён.\n- [ ] проверить сохранение");
-  seed("demo2", "Список дел", "купить хлеб\nпозвонить\n\n1. раз\n2. два");
+  seed("demo1", "Первая заметка", "# Первая заметка\nЭто демонстрационные данные: хост не подключён.\n- [ ] проверить сохранение");  // honest-ui: browser-only mock when no host is attached; the packaged app never uses it
+  seed("demo2", "Список дел", "купить хлеб\nпозвонить\n\n1. раз\n2. два");  // honest-ui: browser-only mock when no host is attached; the packaged app never uses it
   return async (type, payload) => {
     const p = (payload ?? {}) as Record<string, unknown>;
     switch (type) {
-      case "bootstrap": return { contract: CONTRACT, hostVersion: "mock", mode: "mock", projects: structuredClone(projects), notes: [...notes.values()].map((n) => structuredClone(n)), settings: { ...settings } } satisfies Bootstrap;
+      case "bootstrap": return { contract: CONTRACT, hostVersion: "mock", mode: "mock", projects: structuredClone(projects), notes: [...notes.values()].map((n) => structuredClone(n)), settings: { ...settings } } satisfies Bootstrap;  // honest-ui: browser-only mock when no host is attached; the packaged app never uses it
       case "createProject": {
         const name = String(p.name ?? "").trim();
         const found = projects.find((x) => x.name.toLowerCase() === name.toLowerCase());
