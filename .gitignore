@@ -17,3 +17,4 @@ tmp/
 ai-compat.json
 .autopilot/
 ui/artifacts/
+ui/tsconfig.tsbuildinfo

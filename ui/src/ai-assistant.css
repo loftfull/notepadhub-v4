@@ -80,12 +80,13 @@
 @media (min-width: 900px) {
   .app-shell.ai-open .workspace.nav-collapsed > .sidebar {
     display: flex;
-    flex: 0 0 0;
+    flex: 0 0 52px;
     min-width: 0;
-    width: 0;
-    padding: 0;
+    width: 52px;
+    padding: 8px 6px;
     border: 0;
-    overflow: hidden;
+    border-right: 1px solid var(--line);
+    overflow: visible;   /* the library becomes the narrow column of icons, it does not disappear */
   }
 
   .app-shell.ai-open .main-panel {

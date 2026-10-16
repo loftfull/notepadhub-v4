@@ -45,7 +45,7 @@ type Props = {
   /** the note can be laid out (the rules work without any model) */
   canFormat: boolean;
   /** pictures are an AI function: generate from the note or a request, edit a picture of the note */
-  onImage: (kind: "generate" | "edit") => void;
+  onImage: (kind: "generate" | "edit", prompt?: string) => void;
   canImage: boolean;
   onRun: (operation: AiOperation) => void;
   transformations: Transformation[];
@@ -216,6 +216,7 @@ export function AiAssistantPanel({
   const dialogRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [modelQuery, setModelQuery] = useState("");
+  const [imagePrompt, setImagePrompt] = useState("");
   const [keyDraft, setKeyDraft] = useState("");
   const [keyMessage, setKeyMessage] = useState("");
   const [promptLibrary, setPromptLibrary] = useState<{ recipes: PromptRecipe[]; error: string }>(() => {
@@ -369,7 +370,7 @@ export function AiAssistantPanel({
             {visibleOperations.map((operation) => {
               const Icon = operationIcons[operation.id] ?? Sparkles;
               const needsNote = (scope === "linked" && !["summarize"].includes(operation.id));
-              return <button key={operation.id} className="ais-chip" title={needsNote ? (scope === "linked" ? "Для связанных заметок доступны изучение и свой вопрос" : "Доступно в режиме «Вся заметка»") : operationHints[operation.id]} disabled={operation.id === "structure" ? pending || !canFormat : !canStart || needsNote} onClick={() => onRun(operation.id)}><Icon size={14} aria-hidden="true" />{operation.label}</button>;
+              return <button key={operation.id} className={`ais-chip${operation.id === "proofread" ? " is-primary" : ""}`} title={needsNote ? (scope === "linked" ? "Для связанных заметок доступны изучение и свой вопрос" : "Доступно в режиме «Вся заметка»") : operationHints[operation.id]} disabled={operation.id === "structure" ? pending || !canFormat : !canStart || needsNote} onClick={() => onRun(operation.id)}><Icon size={14} aria-hidden="true" />{operation.label}</button>;
             })}
           </div>
           {compactMode && <button className="ai-show-advanced ais-more" onClick={onExpandAdvanced}>Ещё команды и своя инструкция</button>}
@@ -424,6 +425,10 @@ export function AiAssistantPanel({
 
         <section className="ais-section" aria-label="Изображения">
           <div className="ais-label"><span>Изображения</span><small>по тексту заметки или запросу</small></div>
+          <div className="ais-image-row">
+            <input aria-label="Описание картинки" value={imagePrompt} maxLength={500} placeholder="Опишите картинку…" onChange={(event) => setImagePrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && canImage && imagePrompt.trim()) { event.preventDefault(); onImage("generate", imagePrompt.trim()); setImagePrompt(""); } }} />
+            <button type="button" className="ais-image-go" disabled={!canImage || !imagePrompt.trim()} onClick={() => { onImage("generate", imagePrompt.trim()); setImagePrompt(""); }}>Создать</button>
+          </div>
           <div className="ais-chips">
             <button type="button" className="ais-chip" disabled={!canImage} onClick={() => onImage("generate")}><ImagePlus size={14} aria-hidden="true" />Создать изображение…</button>
             <button type="button" className="ais-chip" disabled={!canImage} onClick={() => onImage("edit")}><ImagePlus size={14} aria-hidden="true" />Править изображение…</button>
@@ -565,7 +570,7 @@ const COMPAT_PRESETS: Array<{ id: string; label: string; url: string; note: stri
 ];
 
 function CompatSettings({ status, keyManager, consent, onConsentChange, model, onModelChange, contextLabel }: {
-  status?: { configured: boolean; name: string; baseUrl: string; local: boolean; hasKey: boolean };
+  status?: { configured: boolean; name: string; baseUrl: string; local: boolean; hasKey: boolean; builtin?: boolean };
   keyManager?: Props["keyManager"];
   consent: boolean;
   onConsentChange: (value: boolean) => void;
@@ -598,7 +603,7 @@ function CompatSettings({ status, keyManager, consent, onConsentChange, model, o
       {message && <small role="status">{message}</small>}
       {!keyManager && <small>Настройки сервиса меняются только в настольной программе.</small>}
       <label className="ais-field"><span>Модель (если список не загрузился, введите название вручную)</span><input aria-label="Название модели сервиса" value={model} onChange={(event) => onModelChange(event.target.value)} placeholder="например: openai/gpt-oss-120b" spellCheck={false} /></label>
-      {status?.configured && (!status.local || /(^|[-/:])cloud($|[-/:])/i.test(model)) && <><p>Контекст «{contextLabel}» будет отправлен сервису «{status.name}». Перед первым запуском программа спросит отдельно: цена и условия сервиса ей неизвестны.</p>
+      {status?.configured && (!status.local || /(^|[-/:])cloud($|[-/:])/i.test(model)) && <><p>Контекст «{contextLabel}» будет отправлен сервису «{status.name}». {status.builtin || status.local ? "Это ваш бесплатный сервис по умолчанию или ваш аккаунт Ollama: отдельного вопроса не будет." : "Перед первым запуском программа спросит отдельно: цена и условия сервиса ей неизвестны."}</p>
         <label className="ais-check"><input type="checkbox" checked={consent} onChange={(event) => onConsentChange(event.target.checked)} /> Разрешить отправку выбранного контекста</label></>}
     </div>
   );

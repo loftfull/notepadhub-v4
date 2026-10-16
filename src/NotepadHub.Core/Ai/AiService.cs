@@ -434,7 +434,8 @@ public sealed class AiService
             if (secrets.Count > 0) throw new AiHttpException(400, "В тексте найдены возможные секреты (" + string.Join(", ", secrets) + "). Уберите их или используйте локальную модель.");
             CheckCloudRate();
             var tag = "compat:" + cfg.BaseUrl.Host + ":" + model;
-            if (_confirmCloud != null && !_approvedFree.Contains(tag))
+            // the owner decided (2026-10-16): no extra question for the free default service and for the cloud models of the owner's own Ollama; a service with an unknown price still asks once
+            if (_confirmCloud != null && !cfg.Builtin && !cfg.Local && !_approvedFree.Contains(tag))
             {
                 var approved = await _confirmCloud(new CloudSendInfo(model, 0, system.Length + user.Length, false, cfg.Local ? cfg.Name + " → облако Ollama (ollama.com)" : cfg.Name, PriceUnknown: true));
                 if (!approved) throw new AiHttpException(403, "Отправка во внешний сервис отменена: запрос не подтверждён.");

@@ -11,7 +11,7 @@
   --line-strong: #e1e4ea;
   --ink: #1f1f1f;
   --ink-soft: #626262;
-  --ink-muted: #707782;
+  --ink-muted: #626a75;   /* 4.85:1 on the darkest tinted background (was #707782, 4.0:1) */
   --accent: #0067c0;
   --accent-strong: #005a9e;
   --accent-soft: #eaf2fc;

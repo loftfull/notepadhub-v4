@@ -184,7 +184,7 @@ try {
   await page.locator(".image-modal select").nth(1).selectOption("service");
   await page.locator(".image-modal input[placeholder^='например: dall-e']").fill("fake-image");
   await page.locator(".image-modal input[type=checkbox]").check();
-  await page.getByRole("button", { name: /^Создать$/ }).click();
+  await page.locator(".form-modal").getByRole("button", { name: /^Создать$/ }).click();
   await page.waitForSelector(".image-result img", { timeout: 30000 }).catch(() => {});
   check("a picture is created through the service and stored by the host", (await page.locator(".image-result img").count()) === 1 && compatSeen.images === 1 && assetCount() === a0 + 1, `images=${compatSeen.images} assets=${assetCount() - a0}`);
   await page.getByRole("button", { name: /Вставить в заметку/ }).click();

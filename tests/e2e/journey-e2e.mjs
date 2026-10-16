@@ -66,9 +66,9 @@ try {
   await page.locator(".confirm-modal .form-submit").click();
   await sleep(800);
   await page.locator(".folder-row", { hasText: "Корзина" }).click();
-  await page.locator(".notes-list button", { hasText: TITLE }).waitFor({ timeout: 8000 });
+  await page.locator(".trash-list li", { hasText: TITLE }).waitFor({ timeout: 8000 });
   await shot("05-in-trash.png");
-  check("4 delete: the note asks first and lands in the trash", (await page.locator(".notes-list button", { hasText: TITLE }).count()) === 1);
+  check("4 delete: the note asks first and lands in the trash list", (await page.locator(".trash-list li", { hasText: TITLE }).count()) === 1);
 
   // 5. clean the trash
   await page.getByRole("button", { name: "Очистить корзину" }).click();
@@ -76,7 +76,7 @@ try {
   await page.locator(".confirm-modal .form-submit").click();
   await sleep(1200);
   await shot("06-trash-empty.png");
-  check("5 clean: the trash is empty after the question", (await page.locator(".notes-list button", { hasText: TITLE }).count()) === 0);
+  check("5 clean: the trash is empty after the question", (await page.locator(".trash-list li").count()) === 0);
 } catch (e) {
   check("journey completed without exceptions", false, String(e.message ?? e).split("\n").slice(0, 4).join(" | "));
 } finally {

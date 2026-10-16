@@ -438,6 +438,29 @@ public class AiTests
     }
 
     [Fact]
+    public async Task The_free_default_service_and_the_owners_own_Ollama_cloud_do_not_ask_but_an_unknown_service_asks_once()
+    {
+        foreach (var (url, model, asks) in new[] { ("https://text.pollinations.ai/openai", "openai-fast", false), ("http://127.0.0.1:11434/v1", "gpt-oss:120b-cloud", false), ("https://api.example.test/v1", "some-model", true) })
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "nh4-compat-" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(dir);
+            try
+            {
+                var store = new CompatServiceStore(dir);
+                if (asks) store.Save(url, "Другой", "gsk_1234567890abcdef");
+                else if (!url.Contains("pollinations")) store.Save(url, "Ollama", null);
+                var h = new FakeHandler();
+                h.Respond = _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Sse, Encoding.UTF8, "text/event-stream") };
+                var questions = 0;
+                var svc = new AiService(new HttpClient(h), new MemSecrets(), null, new Uri("http://127.0.0.1:11434"), null, null, _ => { questions++; return Task.FromResult(true); }, store);
+                await Collect(svc, "q1", Body("compat", model, consent: true));
+                Assert.Equal(asks ? 1 : 0, questions);
+            }
+            finally { Directory.Delete(dir, true); }
+        }
+    }
+
+    [Fact]
     public async Task Reasoning_models_get_token_headroom_and_gpt_oss_is_asked_to_think_briefly()
     {
         var (svc, h, dir) = MakeCompat("http://127.0.0.1:1234/v1", null);

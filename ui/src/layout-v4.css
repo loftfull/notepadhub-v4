@@ -580,5 +580,57 @@
 .app-shell .notes-clear:hover { text-decoration: underline; }
 
 /* layers: the top bar (its menus) is above the AI panel; dialogs are above everything */
-.app-shell .topbar { z-index: 50; }
-.form-backdrop, .modal-backdrop { z-index: 90; }
+.app-shell { --z-popover: 40; --z-topbar: 50; --z-modal: 90; --z-toast: 100; }   /* layers added or reworked in v4.4+; older numeric layers move here step by step */
+.app-shell .topbar { z-index: var(--z-topbar); }
+.form-backdrop, .modal-backdrop { z-index: var(--z-modal); }
+
+/* ------------------------------------------------------------------ v4.5: the collapsed library is a narrow column of icons; the trash is a list in the main area */
+.app-shell .sidebar-body { display: contents; }
+.app-shell .rail { display: none; }
+.app-shell .workspace.nav-collapsed .sidebar { width: 52px; padding: 8px 6px; border-right: 1px solid var(--line); overflow: visible; }
+.app-shell .workspace.nav-collapsed .sidebar-body { display: none; }
+.app-shell .workspace.nav-collapsed .sidebar-caption { display: none; }
+.app-shell .workspace.nav-collapsed .sidebar-toolbar { justify-content: center; padding: 0; }
+.app-shell .workspace.nav-collapsed .rail { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 8px; }
+.app-shell .rail-button { position: relative; display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-soft); cursor: pointer; }
+.app-shell .rail-button:hover { background: var(--surface-hover); color: var(--ink); }
+.app-shell .rail-button.is-on { background: var(--accent-soft); color: var(--accent-strong); }
+.app-shell .rail-badge { position: absolute; top: 2px; right: 0; min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--ink-soft); color: #fff; font-size: 10.5px; line-height: 16px; text-align: center; }
+.app-shell .rail-backdrop { position: fixed; inset: 0; z-index: var(--z-popover); }
+.app-shell .rail-pop { position: fixed; left: 58px; top: 150px; right: auto; width: 280px; max-height: 60vh; overflow-y: auto; display: grid; gap: 2px; padding: 6px; }
+.app-shell .rail-pop button { display: flex; align-items: center; gap: 8px; width: 100%; height: 32px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+.app-shell .rail-pop button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .rail-pop button:hover { background: var(--surface-hover); }
+.app-shell .rail-pop-title { padding: 4px 10px 6px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-quiet); }
+.app-shell .rail-pop-empty { padding: 8px 10px; font-size: 13px; color: var(--ink-quiet); }
+.app-shell .quick-section { display: grid; gap: 2px; }
+@media (max-width: 760px) { .app-shell .workspace.nav-collapsed .sidebar { width: 52px; padding: 8px 6px; } }
+
+.app-shell .trash-view { flex: 1; min-height: 0; overflow-y: auto; padding: 28px 32px 40px; max-width: 860px; width: 100%; margin: 0 auto; }
+.app-shell .trash-view h1 { margin: 0 0 4px; font-size: 22px; }
+.app-shell .trash-view header p { margin: 0 0 18px; color: var(--ink-soft); }
+.app-shell .trash-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line-strong); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.app-shell .trash-list li { display: flex; align-items: center; gap: 8px; padding: 0 10px 0 0; min-height: 60px; border-bottom: 1px solid var(--line); }
+.app-shell .trash-list li:last-child { border-bottom: 0; }
+.app-shell .trash-list li:hover { background: var(--surface-hover); }
+.app-shell .trash-title { flex: 1; min-width: 0; display: grid; gap: 2px; padding: 10px 16px; border: 0; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.app-shell .trash-title b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .trash-title small { font-size: 12px; color: var(--ink-soft); }
+.app-shell .trash-restore { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+.app-shell .trash-restore:hover { border-color: var(--accent); }
+.app-shell .trash-forever { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-soft); cursor: pointer; }
+.app-shell .trash-forever:hover { background: #fde8e8; color: #b3261e; }
+.app-shell .trash-footer { display: flex; justify-content: flex-end; margin-top: 14px; }
+.app-shell .trash-empty { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border: 0; border-radius: 8px; background: #cb2431; color: #fff; font: inherit; font-size: 13px; cursor: pointer; }
+.app-shell .trash-empty:hover { background: #a91d28; }
+.app-shell .search-recent { margin-left: 8px; font-style: normal; font-size: 11px; color: var(--accent-strong); background: var(--accent-soft); padding: 0 6px; border-radius: 8px; }
+.app-shell .search-shortcut { margin-left: auto; flex: 0 0 auto; font: inherit; font-size: 11.5px; padding: 1px 6px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface-soft); color: var(--ink-soft); }
+.app-shell .search-count { margin-right: auto; color: var(--ink-quiet); font-variant-numeric: tabular-nums; }
+.app-shell .ais-image-row { display: flex; gap: 6px; }
+.app-shell .ais-image-row input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-soft); color: var(--ink); font: inherit; font-size: 13px; }
+.app-shell .ais-image-go { height: 32px; padding: 0 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.app-shell .ais-image-go:disabled { background: var(--surface-hover); color: var(--ink-muted); cursor: default; }
+.app-shell .ais-chip.is-primary:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong); font-weight: 650; }
+.app-shell .tab-pin { flex: 0 0 auto; margin-right: 5px; color: var(--accent); fill: currentColor; }
+
+.app-shell .workspace.trash-open .notes-section { display: none; }   /* the trash list is in the main area: not twice */

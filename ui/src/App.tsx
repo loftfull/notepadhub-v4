@@ -6,6 +6,7 @@ import { ImageEditDialog, ImageGenerateDialog, type NoteImage } from "./componen
 import { META_INSTRUCTION, parseMetaAnswer, suggestTags, suggestTitle } from "./noteMeta";
 import { INSIGHTS_HEADING, MAX_INSTRUCTION, TRANSFORMATIONS, insightMarkdown, loadCustom, saveCustom, type Transformation } from "./transformations";
 import { TransformationsDialog } from "./components/TransformationsDialog";
+import { TrashView } from "./components/TrashView";
 import { parseAiAnalysis } from "./aiAnalysis";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BlockNoteView } from "@blocknote/mantine";
@@ -13,8 +14,8 @@ import { useCreateBlockNote } from "@blocknote/react";
 import { ru } from "@blocknote/core/locales";
 import type { PartialBlock } from "@blocknote/core";
 import {
-  Archive, ArrowDownToLine, Check, ChevronDown, Clock3, Command, Copy, Download, FileText,
-  Folder, FolderInput, FolderOpen, Hash, Moon, PanelLeftClose, Pencil, Plus, Columns2, ImagePlus, LoaderCircle, Redo2, Tag, Wand2, RotateCcw, Search, Undo2,
+  Archive, ArrowDownToLine, Star, Check, ChevronDown, Clock3, Command, Copy, Download, FileText,
+  Folder, FolderInput, FolderOpen, Hash, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Columns2, ImagePlus, LoaderCircle, Redo2, Tag, Wand2, RotateCcw, Search, Undo2,
   Sparkles, Sun, Trash2, X, Eye, Pin, PinOff, List, Ellipsis, Info,
 } from "lucide-react";
 import { getAiModels, getAiProviders, streamAiTask, type HiddenModel, type AiCitation, type AiModelOption, type AiOperation, type AiProposal, type AiProvider, type AiProviderStatus, type AiScope } from "./ai";
@@ -41,6 +42,7 @@ type FormDialog = { kind: "folder" | "move" | "tag" | "rename"; title: string; v
 type EditorSelection = { text: string; from: number; to: number; top: number; left: number } | null;
 type FinderCommand = {
   id: string;
+  shortcut?: string;
   label: string;
   hint: string;
   keywords: string;
@@ -247,7 +249,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
       }
     };
   const editor = useCreateBlockNote({
-    dictionary: ru,
+    dictionary: { ...ru, placeholders: { ...ru.placeholders, heading: "Введите название заметки" } },
     domAttributes: { editor: { "aria-label": "Текст заметки" } },
     uploadFile,
     pasteHandler,
@@ -257,7 +259,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   });
   // the second editor of the two-note view: the same picture and paste rules, no find bar or wiki links
   const editor2 = useCreateBlockNote({
-    dictionary: ru,
+    dictionary: { ...ru, placeholders: { ...ru.placeholders, heading: "Введите название заметки" } },
     domAttributes: { editor: { "aria-label": "Текст второй заметки" } },
     uploadFile,
     pasteHandler,
@@ -333,7 +335,9 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const [aiSelection, setAiSelection] = useState<EditorSelection>(null);
   const [canUndoAi, setCanUndoAi] = useState(false);
   const metaAbortRef = useRef<AbortController | null>(null);
-  const [imageDialog, setImageDialog] = useState<null | { kind: "generate" | "edit"; selection: string; note: string; startId?: string }>(null);
+  const [imageDialog, setImageDialog] = useState<null | { kind: "generate" | "edit"; selection: string; note: string; startId?: string; prompt?: string }>(null);
+  const [trashPane, setTrashPane] = useState(false);   // the trash is shown as a list in the main area
+  const [railMenu, setRailMenu] = useState<null | "pinned" | "recent">(null);   // the quick list next to the narrow library column
   const [tagsOpen, setTagsOpen] = useState(() => { try { return window.localStorage.getItem("nh4-tags-open") === "1"; } catch { return false; } });
   const [secondId, setSecondId] = useState<string | null>(null);   // the note shown on the right in the two-note view
   const [compareOpen, setCompareOpen] = useState(false);
@@ -376,6 +380,9 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   aiErrorRef.current = aiError;
   const linkIndex = useMemo(() => buildLinkIndex(docs, contents as Record<string, LooseBlock[]>), [docs, contents]);
   linkIndexRef.current = linkIndex;
+  const pinnedDocs = docs.filter((doc) => doc.pinned && !doc.deletedAt);
+  const recentDocs = docs.filter((doc) => typeof doc.lastOpenedAt === "number" && !doc.deletedAt && !doc.archived).sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0));
+  const trashCount = docs.filter((doc) => doc.deletedAt).length;
   const filteredDocs = docs.filter((doc) => {
     if (noteView === "trash") return Boolean(doc.deletedAt);
     if (tagFilter && !parseTags(tags[doc.id]).includes(tagFilter)) return false;
@@ -583,11 +590,11 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     void sync.flush().then((result) => host.flushAck(result));
   }), [sync, folder, folders, dark, tags]);
 
-  const createNote = useCallback((title: string) => {
+  const createNote = useCallback((title: string, heading: string = title) => {
     const id = `note-${Date.now()}`;
     const next: DocItem = { id, title, folder, updated: "только что", icon: "note", lastOpenedAt: Date.now() };
     const initial = [
-      { type: "heading" as const, props: { level: 1 as const }, content: title },
+      { type: "heading" as const, props: { level: 1 as const }, content: heading },
       { type: "paragraph" as const, content: "" },
     ];
     setDocs((current) => [...current, next]);
@@ -599,10 +606,13 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     editor.replaceBlocks(editor.document, initial);
     setSavedAt("Сохраняем локально…");
   }, [editor, folder]);
-  const addDocument = useCallback(() => createNote("Новая заметка"), [createNote]);
+  // a new note has no name yet: the heading is empty and shows a hint, the tab says "Без названия" until a title is typed
+  const addDocument = useCallback(() => createNote("Без названия", ""), [createNote]);
 
   const selectDocument = useCallback((doc: DocItem) => {
     haltAuto();
+    setTrashPane(false);
+    setRailMenu(null);
     setAiProposal(null);
     activeIdRef.current = doc.id;
     setActiveId(doc.id);
@@ -721,21 +731,24 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
 
   const switchToSpecialView = useCallback((view: "pinned" | "recent" | "archive" | "trash") => {
     setNoteView(view);
+    setRailMenu(null);
     setSidebarCollapsed(window.matchMedia("(max-width: 760px)").matches);
+    if (view === "trash") { setTrashPane(true); return; }   // the trash is a list in the main area; no note is opened behind it
+    setTrashPane(false);
     const firstNote = (view === "pinned"
       ? docs.filter((doc) => doc.pinned && !doc.deletedAt)
       : view === "recent"
         ? docs.filter((doc) => typeof doc.lastOpenedAt === "number" && !doc.deletedAt && !doc.archived).sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0))
-        : docs.filter((doc) => view === "trash" ? Boolean(doc.deletedAt) : Boolean(doc.archived && !doc.deletedAt)))[0];
+        : docs.filter((doc) => Boolean(doc.archived && !doc.deletedAt)))[0];
     if (firstNote) {
       selectDocument(firstNote);
       return;
     }
     activeIdRef.current = null;
     setActiveId(null);
-    const emptyText = view === "trash" ? "Корзина пуста." : view === "archive" ? "В архиве пока нет заметок." : view === "pinned" ? "Закреплённых заметок пока нет." : "Недавно открытых заметок пока нет.";
+    const emptyText = view === "archive" ? "В архиве пока нет заметок." : view === "pinned" ? "Закреплённых заметок пока нет." : "Недавно открытых заметок пока нет.";
     editor.replaceBlocks(editor.document, [{ type: "paragraph", content: emptyText }]);
-    setSavedAt(view === "trash" ? "Корзина" : view === "archive" ? "Архив" : view === "pinned" ? "Закреплённые" : "Недавние");
+    setSavedAt(view === "archive" ? "Архив" : view === "pinned" ? "Закреплённые" : "Недавние");
   }, [docs, editor, selectDocument]);
 
   const archiveActiveNote = useCallback(() => {
@@ -783,7 +796,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     const doc = id ? docsRef.current.find((item) => item.id === id) : undefined;
     if (!doc) return;
     setTabMenu(null);
-    setConfirmDialog({ title: "Переместить в корзину?", message: `Заметка «${doc.title}» уйдёт в корзину. Её можно восстановить оттуда или сразу по кнопке «Отменить».`, confirm: "В корзину", danger: true, run: () => trashDoc(id!) });
+    setConfirmDialog({ title: "Переместить в корзину?", message: `Заметка «${doc.title}» уйдёт в корзину. Вы можете восстановить её в течение 30 дней: из корзины или сразу по кнопке «Отменить».`, confirm: "В корзину", danger: true, run: () => trashDoc(id!) });
   }, [trashDoc]);
 
   const deleteActiveNote = useCallback(() => { requestTrash(activeId); }, [activeId, requestTrash]);
@@ -848,6 +861,21 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     if (ids.length === 0) { setNotice("Корзина пуста"); return; }
     setConfirmDialog({ title: "Очистить корзину?", message: `Заметок в корзине: ${ids.length}. Они будут удалены навсегда, вернуть их будет нельзя.`, confirm: "Очистить корзину", danger: true, run: () => { void deleteForever(ids).then((n) => { if (activeIdRef.current && ids.includes(activeIdRef.current)) { activeIdRef.current = null; setActiveId(null); } setNotice(`Удалено навсегда: ${n}`); }); } });
   }, [deleteForever, docs]);
+
+  /** Restores a note from its row in the trash without leaving the list; "Отменить" puts it back. */
+  const restoreFromTrash = useCallback((id: string) => {
+    const doc = docsRef.current.find((item) => item.id === id);
+    if (!doc) return;
+    setDocs((current) => current.map((item) => item.id === id ? { ...item, deletedAt: undefined } : item));
+    setNotice(`«${doc.title}» восстановлена`);
+    setToastAction({ label: "Отменить", run: () => setDocs((current) => current.map((item) => item.id === id ? { ...item, deletedAt: new Date().toISOString() } : item)) });
+  }, []);
+
+  const deleteOneForever = useCallback((id: string) => {
+    const doc = docsRef.current.find((item) => item.id === id);
+    if (!doc) return;
+    setConfirmDialog({ title: "Удалить навсегда?", message: `Заметка «${doc.title}» будет удалена без возможности восстановления.`, confirm: "Удалить навсегда", danger: true, run: () => { void deleteForever([id]).then((n) => setNotice(n ? "Заметка удалена навсегда" : "Не удалось удалить заметку")); } });
+  }, [deleteForever]);
 
   // Notes stay in the trash for 30 days, then go for good (checked once after the library is loaded).
   const trashPurgedRef = useRef(false);
@@ -1399,12 +1427,12 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     return out;
   };
 
-  const openImageDialog = useCallback((kind: "generate" | "edit") => {
+  const openImageDialog = useCallback((kind: "generate" | "edit", prompt?: string) => {
     if (!isHosted()) { setNotice("Работа с изображениями доступна в настольной программе."); return; }
     let startId: string | undefined;
     try { const here = editor.getTextCursorPosition().block; if (here.type === "image") startId = here.id; } catch { /* no cursor */ }
     const note = editor.document.map((block) => blockText(block.content)).filter((t) => t.trim()).join(" ").replace(/\s+/g, " ").slice(0, 400);
-    setImageDialog({ kind, selection: editor.getSelectedText(), note, startId });
+    setImageDialog({ kind, selection: editor.getSelectedText(), note, startId, ...(prompt ? { prompt } : {}) });
   }, [editor]);
 
   const insertGeneratedImage = useCallback((url: string, caption: string) => {
@@ -1518,10 +1546,10 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   }, [editor]);
 
   const commandResults: FinderCommand[] = [
-    { id: "insert-link", label: "Вставить ссылку на заметку", hint: "[[название]] — связь между заметками (Ctrl L)", keywords: "ссылка связь wiki обратные", icon: Hash, disabled: !activeId, run: () => setLinkPicker({ query: "", index: 0 }) },
+    { id: "insert-link", shortcut: "Ctrl+L", label: "Вставить ссылку на заметку", hint: "[[название]] — связь между заметками (Ctrl L)", keywords: "ссылка связь wiki обратные", icon: Hash, disabled: !activeId, run: () => setLinkPicker({ query: "", index: 0 }) },
     { id: "daily-note", label: "Заметка за сегодня", hint: "Открыть или создать запись на сегодня", keywords: "дневник сегодня дата ежедневная", icon: Clock3, run: () => openDailyNote() },
     { id: "new-note", label: "Новая заметка", hint: "Создать заметку", keywords: "создать новая заметка", icon: Plus, run: () => addDocument() },
-    { id: "toggle-ai", label: activeInspector === "ai" ? "Закрыть AI-помощник" : "Открыть AI-помощник", hint: "Панель без запуска генерации", keywords: "ai помощник открыть закрыть", icon: Sparkles, run: () => activeInspector === "ai" ? setActiveInspector(null) : openAiAssistant("paragraph") },
+    { id: "toggle-ai", shortcut: "Ctrl+J", label: activeInspector === "ai" ? "Закрыть AI-помощник" : "Открыть AI-помощник", hint: "Панель без запуска генерации", keywords: "ai помощник открыть закрыть", icon: Sparkles, run: () => activeInspector === "ai" ? setActiveInspector(null) : openAiAssistant("paragraph") },
     { id: "toggle-preview", label: showPreview ? "Редактировать заметку" : "Предпросмотр", hint: "Переключить режим просмотра", keywords: "предпросмотр редактировать просмотр", icon: Eye, run: () => setShowPreview((value) => !value) },
     { id: "properties", label: activeInspector === "properties" ? "Закрыть свойства" : "Открыть свойства", hint: "Свойства текущей заметки", keywords: "свойства метка папка", icon: ChevronDown, disabled: !activeDoc, run: () => setActiveInspector((current) => current === "properties" ? null : "properties") },
     { id: "rename", label: "Переименовать заметку", hint: "Изменить название", keywords: "переименовать название", icon: Pencil, disabled: !activeDoc, run: () => activeDoc && setFormDialog({ kind: "rename", title: "Переименовать заметку", value: activeDoc.title, hint: "Название заметки" }) },
@@ -1535,9 +1563,17 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
       run: () => { setAiInstruction(recipe.instruction); openAiAssistant(undefined, true); },
     })),
   ];
+  const [recentCommandIds, setRecentCommandIds] = useState<string[]>(() => { try { const v = JSON.parse(window.localStorage.getItem("nh4-recent-commands") ?? "[]"); return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").slice(0, 4) : []; } catch { return []; } });
+  const rememberCommand = (id: string) => {
+    const next = [id, ...recentCommandIds.filter((x) => x !== id)].slice(0, 4);
+    setRecentCommandIds(next);
+    try { window.localStorage.setItem("nh4-recent-commands", JSON.stringify(next)); } catch { /* optional */ }
+  };
   const commandMode = query.trimStart().startsWith(">");
   const commandQuery = query.trim().replace(/^>\s*/, "").toLocaleLowerCase();
-  const visibleCommands = commandResults.filter((command) => !commandQuery || `${command.label} ${command.hint} ${command.keywords}`.toLocaleLowerCase().includes(commandQuery));
+  const visibleCommands = commandResults
+    .filter((command) => !commandQuery || `${command.label} ${command.hint} ${command.keywords}`.toLocaleLowerCase().includes(commandQuery))
+    .sort((a, b) => { if (commandQuery) return 0; const ra = recentCommandIds.indexOf(a.id), rb = recentCommandIds.indexOf(b.id); return (ra < 0 ? 99 : ra) - (rb < 0 ? 99 : rb); });   // without a query the commands used lately come first
 
   const handleAiCitation = useCallback((citation: AiCitation) => {
     if (citation.blockId.startsWith("note:")) {
@@ -2014,6 +2050,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         setSelectedSearchIndex((index) => Math.max(0, index - 1));
       } else if (event.key === "Enter" && visibleCommands[selectedSearchIndex] && !visibleCommands[selectedSearchIndex].disabled) {
         event.preventDefault();
+        rememberCommand(visibleCommands[selectedSearchIndex].id);
         visibleCommands[selectedSearchIndex].run();
         setShowSearch(false);
         setQuery("");
@@ -2097,7 +2134,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
               : <>
                 <div className="search-scrim" onMouseDown={() => { setShowSearch(false); setQuery(""); setSelectedSearchIndex(0); window.setTimeout(restoreSearchFocus, 0); }} />
                 <div className="search-field" role="search"><Search size={16} /><input id="global-search" role="combobox" aria-expanded="true" aria-controls="search-listbox" aria-autocomplete="list" aria-activedescendant={`search-opt-${selectedSearchIndex}`} value={query} onChange={(event) => { setQuery(event.target.value); setSelectedSearchIndex(0); }} onKeyDown={handleSearchKeyDown} placeholder="Поиск заметок… Введите &gt; для команд" autoComplete="off" aria-label="Поиск заметок и команд" /><kbd>Esc</kbd></div>
-                <div className="search-modal" role="dialog" aria-label="Результаты поиска" tabIndex={0}><div className="search-results-label" id="search-title">{commandMode ? "Команды" : "Глобальный поиск · заметки"}<small>{commandMode ? "Введите название команды или рецепта" : "Введите > для команд"}</small></div>{commandMode ? <div id="search-listbox" role="listbox" aria-label="Результаты команд">{visibleCommands.map((command, index) => { const Icon = command.icon; return <button key={command.id} id={`search-opt-${index}`} tabIndex={-1} role="option" disabled={command.disabled} className="search-result command-result" aria-selected={index === selectedSearchIndex} onMouseEnter={() => setSelectedSearchIndex(index)} onClick={() => { if (command.disabled) return; command.run(); setShowSearch(false); setQuery(""); setSelectedSearchIndex(0); window.setTimeout(restoreSearchFocus, 0); }}><Icon size={17} /><span>{command.label}<small>{command.hint}{command.disabled ? " · недоступно без активной заметки" : ""}</small></span></button>; })}</div> : <div id="search-listbox" role="listbox" aria-label="Результаты заметок">{searchResults.map((doc, index) => <button key={doc.id} id={`search-opt-${index}`} tabIndex={-1} role="option" className="search-result" aria-selected={index === selectedSearchIndex} onMouseEnter={() => setSelectedSearchIndex(index)} onClick={() => chooseSearchResult(doc)}><FileText size={17} /><span>{doc.title}<small>{doc.folder}{doc.archived ? " · Архив" : ""}</small>{searchSnippets.get(doc.id) ? <small className="search-snippet">{searchSnippets.get(doc.id)}</small> : null}</span></button>)}</div>}{(commandMode ? visibleCommands.length === 0 : searchResults.length === 0) && <div className="search-empty">{commandMode ? "Команды не найдены" : "Ничего не найдено"}</div>}<div className="search-modal-footer"><span><kbd>↵</kbd> открыть</span>      <span><kbd>↑</kbd><kbd>↓</kbd> перемещение</span><span><kbd>&gt;</kbd> команды и рецепты</span><span><kbd>Esc</kbd> закрыть</span></div></div>
+                <div className="search-modal" role="dialog" aria-label="Результаты поиска" tabIndex={0}><div className="search-results-label" id="search-title">{commandMode ? "Команды" : "Глобальный поиск · заметки"}<small>{commandMode ? "Введите название команды или рецепта" : "Введите > для команд"}</small></div>{commandMode ? <div id="search-listbox" role="listbox" aria-label="Результаты команд">{visibleCommands.map((command, index) => { const Icon = command.icon; return <button key={command.id} id={`search-opt-${index}`} tabIndex={-1} role="option" disabled={command.disabled} className="search-result command-result" aria-selected={index === selectedSearchIndex} onMouseEnter={() => setSelectedSearchIndex(index)} onClick={() => { if (command.disabled) return; rememberCommand(command.id); command.run(); setShowSearch(false); setQuery(""); setSelectedSearchIndex(0); window.setTimeout(restoreSearchFocus, 0); }}><Icon size={17} /><span>{command.label}{!commandQuery && recentCommandIds.includes(command.id) && <em className="search-recent">недавно</em>}<small>{command.hint}{command.disabled ? " · недоступно без активной заметки" : ""}</small></span>{command.shortcut && <kbd className="search-shortcut">{command.shortcut}</kbd>}</button>; })}</div> : <div id="search-listbox" role="listbox" aria-label="Результаты заметок">{searchResults.map((doc, index) => <button key={doc.id} id={`search-opt-${index}`} tabIndex={-1} role="option" className="search-result" aria-selected={index === selectedSearchIndex} onMouseEnter={() => setSelectedSearchIndex(index)} onClick={() => chooseSearchResult(doc)}><FileText size={17} /><span>{doc.title}<small>{doc.folder}{doc.archived ? " · Архив" : ""}</small>{searchSnippets.get(doc.id) ? <small className="search-snippet">{searchSnippets.get(doc.id)}</small> : null}</span></button>)}</div>}{(commandMode ? visibleCommands.length === 0 : searchResults.length === 0) && <div className="search-empty">{commandMode ? "Команды не найдены" : "Ничего не найдено"}</div>}<div className="search-modal-footer"><span className="search-count">{commandMode ? `${visibleCommands.length} из ${commandResults.length}` : `${searchResults.length} из ${docs.filter((doc) => !doc.deletedAt).length}`}</span><span><kbd>↵</kbd> открыть</span>      <span><kbd>↑</kbd><kbd>↓</kbd> перемещение</span><span><kbd>&gt;</kbd> команды и рецепты</span><span><kbd>Esc</kbd> закрыть</span></div></div>
               </>}
           </div>
             <details className="note-toolbar-overflow note-menu">
@@ -2134,16 +2171,21 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         </div>
       </header>
 
-      <div className={`workspace${navigationCollapsed ? " nav-collapsed" : ""}`}>
-        <aside className="sidebar" id="note-navigation" aria-label="Навигация по заметкам" aria-hidden={navigationCollapsed} inert={navigationCollapsed}>
-          <div className="sidebar-toolbar"><span className="sidebar-caption">БИБЛИОТЕКА ЗАМЕТОК</span><button className="icon-button tiny desktop-nav-close" aria-label="Свернуть навигацию" title="Свернуть навигацию" onClick={() => setSidebarCollapsed(true)}><PanelLeftClose size={17} /></button></div>
+      <div className={`workspace${navigationCollapsed ? " nav-collapsed" : ""}${trashPane ? " trash-open" : ""}`}>
+        <aside className="sidebar" id="note-navigation" aria-label="Навигация по заметкам">
+          <div className="sidebar-toolbar"><span className="sidebar-caption">БИБЛИОТЕКА ЗАМЕТОК</span><button ref={mobileNavTriggerRef} className="icon-button tiny desktop-nav-close" aria-expanded={!navigationCollapsed} aria-controls="note-navigation" aria-label={navigationCollapsed ? "Развернуть библиотеку" : "Свернуть библиотеку"} title={navigationCollapsed ? (aiSideBySideNav ? "Развернуть библиотеку (помощник закроется)" : "Развернуть библиотеку") : "Свернуть библиотеку"} onClick={() => { if (!navigationCollapsed) { setSidebarCollapsed(true); return; } if (aiSideBySideNav) setActiveInspector(null); setSidebarCollapsed(false); }}>{navigationCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button></div>
+          <div className="sidebar-body">
           <button className="new-note-button" onClick={addDocument}><Plus size={16} />Новая заметка</button>
+          <section className="nav-section quick-section" aria-label="Быстрый доступ">
+            <button className={`folder-row${noteView === "pinned" ? " selected" : ""}`} aria-current={noteView === "pinned" ? "page" : undefined} onClick={() => switchToSpecialView("pinned")}><Star size={16} className="folder-icon" /><span>Избранное</span><span className="folder-count">{pinnedDocs.length}</span></button>
+            <button className={`folder-row${noteView === "recent" ? " selected" : ""}`} aria-current={noteView === "recent" ? "page" : undefined} onClick={() => switchToSpecialView("recent")}><Clock3 size={16} className="folder-icon" /><span>Недавние</span></button>
+          </section>
           <section className="nav-section" aria-labelledby="projects-heading">
             <div className="section-label"><h2 id="projects-heading">Проекты</h2><button className="icon-button tiny" aria-label="Добавить проект" title="Добавить проект" onClick={addFolder}><Plus size={16} /></button></div>
             {folders.map((name) => <button key={name} className={`folder-row${noteView === "folder" && folder === name ? " selected" : ""}`} aria-current={noteView === "folder" && folder === name ? "page" : undefined} onClick={() => handleFolderSelect(name)}><Folder size={16} className="folder-icon" /><span>{name === "Архив" ? "Архив · проект" : name}</span><span className="folder-count">{docs.filter((doc) => doc.folder === name && !doc.deletedAt && !doc.archived).length}</span></button>)}
           </section>
           <section className="nav-section notes-section" aria-label="Заметки раздела">
-            <div className="section-label"><h2>{noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : "Заметки"}</h2>{noteView === "trash" && filteredDocs.length > 0 ? <button className="notes-clear" onClick={emptyTrash}>Очистить корзину</button> : <span className="notes-count">{filteredDocs.length}</span>}</div>
+            <div className="section-label"><h2>{noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : "Заметки"}</h2><span className="notes-count">{filteredDocs.length}</span></div>
             <ul className="notes-list">
               {filteredDocs.map((doc) => <li key={doc.id}><button className={doc.id === activeId ? "is-current" : undefined} aria-current={doc.id === activeId ? "true" : undefined} title={doc.title} onClick={() => selectDocument(doc)}><FileText size={14} aria-hidden="true" /><span>{doc.title}</span></button></li>)}
               {filteredDocs.length === 0 && <li className="notes-empty">В этом разделе нет заметок</li>}
@@ -2161,15 +2203,27 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
           </details>}
           <div className="sidebar-spacer" />
           <div className="sidebar-footer"><span className="sync-indicator"><Check size={14} /> Локальное хранилище</span></div>
+          </div>
+          <nav className="rail" aria-label="Быстрые разделы">
+            <button type="button" className="rail-button" aria-label="Новая заметка" title="Новая заметка" onClick={addDocument}><Plus size={17} /></button>
+            <button type="button" className={`rail-button${railMenu === "pinned" ? " is-on" : ""}`} aria-label="Избранное" title="Избранное" aria-expanded={railMenu === "pinned"} onClick={() => setRailMenu((current) => current === "pinned" ? null : "pinned")}><Star size={17} /></button>
+            <button type="button" className={`rail-button${railMenu === "recent" ? " is-on" : ""}`} aria-label="Недавние" title="Недавние" aria-expanded={railMenu === "recent"} onClick={() => setRailMenu((current) => current === "recent" ? null : "recent")}><Clock3 size={17} /></button>
+            <button type="button" className={`rail-button${noteView === "archive" ? " is-on" : ""}`} aria-label="Архив" title="Архив" onClick={() => switchToSpecialView("archive")}><Archive size={17} /></button>
+            <button type="button" className={`rail-button${noteView === "trash" ? " is-on" : ""}`} aria-label="Корзина" title="Корзина" onClick={() => switchToSpecialView("trash")}><Trash2 size={17} />{trashCount > 0 && <span className="rail-badge">{trashCount}</span>}</button>
+          </nav>
         </aside>
+        {railMenu && <div className="rail-backdrop" onMouseDown={() => setRailMenu(null)}><div className="rail-pop note-toolbar-menu" role="menu" aria-label={railMenu === "pinned" ? "Избранные заметки" : "Недавние заметки"} onMouseDown={(event) => event.stopPropagation()}>
+          <div className="rail-pop-title">{railMenu === "pinned" ? "Избранное" : "Недавние"}</div>
+          {(railMenu === "pinned" ? pinnedDocs : recentDocs).slice(0, 12).map((doc) => <button key={doc.id} role="menuitem" onClick={() => { setNoteView("folder"); setFolder(doc.folder); selectDocument(doc); }}><FileText size={14} aria-hidden="true" /><span>{doc.title}</span></button>)}
+          {(railMenu === "pinned" ? pinnedDocs : recentDocs).length === 0 && <div className="rail-pop-empty">{railMenu === "pinned" ? "Закреплённых заметок пока нет. Закрепите заметку в меню «⋯»." : "Недавно открытых заметок пока нет."}</div>}
+        </div></div>}
 
         <main className="main-panel">
           <div className="document-tabs">
-            {navigationCollapsed && <div className="tab-actions"><button ref={mobileNavTriggerRef} className="icon-button quiet restore-nav" aria-label={navigationCollapsed ? (aiSideBySideNav ? "Восстановить навигацию и закрыть AI-помощник" : "Показать проекты") : "Скрыть проекты"} title={navigationCollapsed ? (aiSideBySideNav ? "Восстановить навигацию и закрыть AI-помощник" : "Показать проекты") : "Скрыть проекты"} onClick={() => { if (aiSideBySideNav) { setActiveInspector(null); setSidebarCollapsed(false); } else { setSidebarCollapsed((collapsed) => !collapsed); } }}><PanelLeftClose size={17} /></button></div>}
             <div className="tabs-scroller">
               <div className="tab-list" role={openTabs.length > 0 ? "tablist" : undefined} aria-label={openTabs.length > 0 ? `Открытые заметки: ${viewTitle}` : undefined}>
               {openTabs.map((doc, index) => <div key={doc.id} className={`tab-wrap${doc.id === activeId ? " is-active" : ""}`} onContextMenu={(event) => { event.preventDefault(); setTabMenu({ x: event.clientX, y: event.clientY, id: doc.id }); }} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); void closeTab(doc.id); } }}>
-                <button id={`note-tab-${doc.id}`} data-tab-index={index} role="tab" aria-controls="editor-workspace-panel" aria-selected={doc.id === activeId} tabIndex={doc.id === activeId ? 0 : -1} className={`tab${doc.id === activeId ? " active-tab" : ""}`} title={`${doc.title} (Delete — в корзину, Ctrl+W — закрыть, правая кнопка — меню)`} onKeyDown={(event) => handleTabKeyDown(event, index)} onClick={() => selectDocument(doc)}><span>{doc.title}</span></button>
+                <button id={`note-tab-${doc.id}`} data-tab-index={index} role="tab" aria-controls="editor-workspace-panel" aria-selected={doc.id === activeId} tabIndex={doc.id === activeId ? 0 : -1} className={`tab${doc.id === activeId ? " active-tab" : ""}`} title={`${doc.title} (Delete — в корзину, Ctrl+W — закрыть, правая кнопка — меню)`} onKeyDown={(event) => handleTabKeyDown(event, index)} onClick={() => selectDocument(doc)}>{doc.pinned && <Star size={11} className="tab-pin" aria-label="Закреплена" />}<span>{doc.title}</span></button>
                 <button className="tab-close" tabIndex={-1} aria-hidden="true" title="Закрыть вкладку (изменения сохранятся)" onClick={() => void closeTab(doc.id)}><X size={13} /></button>
               </div>)}
               </div>
@@ -2183,14 +2237,15 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
               </div>
             </details>}
           </div>
-          {secondId && activeDoc && <SplitBar leftId={activeDoc.id} rightId={secondId} notes={splitCandidates().map((doc) => ({ id: doc.id, title: doc.title }))} onPickLeft={(id) => { const doc = docs.find((item) => item.id === id); if (doc) selectDocument(doc); }} onPickRight={setSecondId} onMoveRight={() => moveSelection("left")} onMoveLeft={() => moveSelection("right")} onCompare={() => setCompareOpen(true)} onSwap={swapNotes} onClose={() => setSecondId(null)} />}
-          {!activeDoc && <div className="empty-notes" role="region" aria-label="Нет открытых заметок">
+          {secondId && activeDoc && !trashPane && <SplitBar leftId={activeDoc.id} rightId={secondId} notes={splitCandidates().map((doc) => ({ id: doc.id, title: doc.title }))} onPickLeft={(id) => { const doc = docs.find((item) => item.id === id); if (doc) selectDocument(doc); }} onPickRight={setSecondId} onMoveRight={() => moveSelection("left")} onMoveLeft={() => moveSelection("right")} onCompare={() => setCompareOpen(true)} onSwap={swapNotes} onClose={() => setSecondId(null)} />}
+          {trashPane && noteView === "trash" && <TrashView items={docs.filter((doc) => doc.deletedAt).sort((a, b) => String(b.deletedAt).localeCompare(String(a.deletedAt))).map((doc) => ({ id: doc.id, title: doc.title, deletedAt: String(doc.deletedAt) }))} onRestore={restoreFromTrash} onDeleteForever={deleteOneForever} onEmpty={emptyTrash} onOpen={(id) => { const doc = docsRef.current.find((item) => item.id === id); if (doc) selectDocument(doc); }} />}
+          {!activeDoc && !trashPane && <div className="empty-notes" role="region" aria-label="Нет открытых заметок">
             <FileText size={34} aria-hidden="true" />
             <h2>Нет открытых заметок</h2>
             <p>Создайте заметку или откройте файл. Вставьте текст или картинку прямо в редактор.</p>
             <div><button className="empty-primary" onClick={addDocument}><Plus size={15} />Новая заметка</button><button onClick={() => (isHosted() ? void handleHostFileOpen() : textInputRef.current?.click())}><FolderOpen size={15} />Открыть файлы…</button></div>
           </div>}
-          <div id="editor-workspace-panel" className={`editor-scroll${secondId ? " is-split" : ""}`} hidden={!activeDoc} role="tabpanel" aria-label={activeDoc ? undefined : "Редактор заметки"} aria-labelledby={activeDoc ? `note-tab-${activeDoc.id}` : undefined} tabIndex={0}>
+          <div id="editor-workspace-panel" className={`editor-scroll${secondId ? " is-split" : ""}`} hidden={!activeDoc || trashPane} role="tabpanel" aria-label={activeDoc ? undefined : "Редактор заметки"} aria-labelledby={activeDoc ? `note-tab-${activeDoc.id}` : undefined} tabIndex={0}>
             <div className="editor-column">
               {find && !showPreview && <FindBar host={editor._tiptapEditor as unknown as FindHost} withReplace={find.replace} onClose={() => { setFind(null); editor.focus(); }} onToggleReplace={() => setFind((c) => c && ({ replace: !c.replace }))} />}
               <div className="editor-card" style={{ "--editor-zoom": zoom / 100 } as React.CSSProperties} onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={(e) => void handleDrop(e)}>{showPreview
@@ -2316,7 +2371,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         <ul className="history-list" aria-label="Версии заметки">{history.entries.map((entry) => <li key={entry.name}><button type="button" aria-pressed={history.selected === entry.name} onClick={() => void previewVersion(entry.name)}><strong>{entry.timestampLocal}</strong><small>{entry.preview || "(пусто)"}</small></button></li>)}</ul>
         {history.selected && <><pre className="history-preview" aria-label="Содержимое версии">{history.preview}</pre><div className="form-modal-actions"><button type="button" className="form-cancel" onClick={() => setHistory(null)}>Закрыть</button><button type="button" className="form-submit" onClick={() => void restoreVersion(history.selected!)}>Восстановить эту версию</button></div></>}
       </div></div>}
-      {imageDialog?.kind === "generate" && <ImageGenerateDialog suggestSelection={imageDialog.selection} suggestNote={imageDialog.note} serviceReady={Boolean(aiProviders?.compat?.configured)} serviceName={aiProviders?.compat?.name ?? ""} onInsert={insertGeneratedImage} onClose={() => setImageDialog(null)} />}
+      {imageDialog?.kind === "generate" && <ImageGenerateDialog initialPrompt={imageDialog.prompt} initialConsent={aiRemoteConsent} autoStart={Boolean(imageDialog.prompt)} suggestSelection={imageDialog.selection} suggestNote={imageDialog.note} serviceReady={Boolean(aiProviders?.compat?.configured)} serviceName={aiProviders?.compat?.name ?? ""} onInsert={insertGeneratedImage} onClose={() => setImageDialog(null)} />}
       {imageDialog?.kind === "edit" && <ImageEditDialog images={noteImages()} startId={imageDialog.startId} onReplace={replaceImage} onClose={() => setImageDialog(null)} />}
       {metaDialog && <div className="modal-backdrop form-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setMetaDialog(null); }}><form className="form-modal" role="dialog" aria-modal="true" aria-labelledby="meta-title" onSubmit={applyMetaDialog}>
         <div className="form-modal-heading"><div><h2 id="meta-title">Название и метки</h2><p role="status">{metaDialog.ai === "work" || metaDialog.ai === "wait" ? <LoaderCircle size={13} className="ai-spinner" /> : null} {metaDialog.note}</p></div><button type="button" className="icon-button" aria-label="Закрыть" onClick={() => setMetaDialog(null)}><X size={18} /></button></div>

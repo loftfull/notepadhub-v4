@@ -16,19 +16,23 @@ const SIZES: Array<{ id: string; label: string; w: number; h: number }> = [
   { id: "tall", label: "Высокая 576×1024", w: 576, h: 1024 },
 ];
 
-export function ImageGenerateDialog({ suggestSelection, suggestNote, serviceReady, serviceName, onInsert, onClose }: {
+export function ImageGenerateDialog({ suggestSelection, suggestNote, serviceReady, serviceName, initialPrompt, initialConsent, autoStart, onInsert, onClose }: {
   suggestSelection: string;
   suggestNote: string;
   serviceReady: boolean;
   serviceName: string;
+  /** a description typed in the AI panel: it starts the picture at once */
+  initialPrompt?: string;
+  initialConsent?: boolean;
+  autoStart?: boolean;
   onInsert: (url: string, caption: string) => void;
   onClose: () => void;
 }) {
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(initialPrompt ?? "");
   const [size, setSize] = useState("sq");
   const [via, setVia] = useState<"pollinations" | "service">("pollinations");
   const [model, setModel] = useState(() => { try { return localStorage.getItem("nh4-image-model") ?? ""; } catch { return ""; } });
-  const [consent, setConsent] = useState(false);
+  const [consent, setConsent] = useState(initialConsent ?? false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<string | null>(null);
@@ -43,6 +47,9 @@ export function ImageGenerateDialog({ suggestSelection, suggestNote, serviceRead
     } catch (e) { setError(e instanceof Error ? e.message : "Не удалось создать картинку."); }
     finally { setBusy(false); }
   };
+
+  useEffect(() => { if (autoStart && prompt.trim() && consent) void generate(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="modal-backdrop form-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
