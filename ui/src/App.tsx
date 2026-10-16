@@ -2266,6 +2266,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         canRun={Boolean(activeDoc && !activeDoc.deletedAt && aiModel && selectedModel
           && (aiProvider === "ollama" ? aiProviders?.ollama.configured : aiProvider === "compat" ? aiProviders?.compat?.configured : aiProviders?.openrouter.configured)
           && (aiProvider === "ollama" || (aiProvider === "compat" ? (aiRemoteConsent || (aiProviders?.compat?.local && !cloudModelName(aiModel))) : (aiRemoteConsent && (selectedModel.free || estimatedAiCost !== null)))))}
+        canFormat={Boolean(activeDoc && !activeDoc.deletedAt && !showPreview && formatJob === null)}
         onRun={(operation) => { if (operation === "structure") runAutoFormat(); else void requestAiTask(operation); }}
         transformations={transformationList}
         onManageTransformations={() => setTransformationsOpen(true)}

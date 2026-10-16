@@ -42,6 +42,8 @@ type Props = {
   proposal: AiProposal | null;
   estimatedCost: number | null;
   canRun: boolean;
+  /** the note can be laid out (the rules work without any model) */
+  canFormat: boolean;
   onRun: (operation: AiOperation) => void;
   transformations: Transformation[];
   onManageTransformations: () => void;
@@ -205,7 +207,7 @@ export function AiAssistantPanel({
   provider, onProviderChange, model, onModelChange, models, modelsLoading, modelsError, hiddenModels, providers,
   scope, linkedTitles, onScopeChange, contextText, instruction, onInstructionChange, writingRule, onWritingRuleChange,
   onSaveWritingRule, consent, onConsentChange, pending, streamText, firstTokenMs, elapsedMs, error,
-  proposal, estimatedCost, canRun, onRun, transformations, onManageTransformations, onRunTransformation, onAsk, onCancel, onAccept, onReject, onCitation, onClose, keyManager,
+  proposal, estimatedCost, canRun, canFormat, onRun, transformations, onManageTransformations, onRunTransformation, onAsk, onCancel, onAccept, onReject, onCitation, onClose, keyManager,
 }: Props) {
   const [modalMode, setModalMode] = useState(() => window.matchMedia("(max-width: 1199px)").matches);
   const dialogRef = useRef<HTMLElement>(null);
@@ -409,7 +411,7 @@ export function AiAssistantPanel({
             {visibleOperations.map((operation) => {
               const Icon = operationIcons[operation.id] ?? Sparkles;
               const needsNote = (scope === "linked" && !["summarize"].includes(operation.id));
-              return <button key={operation.id} className="ais-chip" title={needsNote ? (scope === "linked" ? "Для связанных заметок доступны изучение и свой вопрос" : "Доступно в режиме «Вся заметка»") : operationHints[operation.id]} disabled={!canStart || needsNote} onClick={() => onRun(operation.id)}><Icon size={14} aria-hidden="true" />{operation.label}</button>;
+              return <button key={operation.id} className="ais-chip" title={needsNote ? (scope === "linked" ? "Для связанных заметок доступны изучение и свой вопрос" : "Доступно в режиме «Вся заметка»") : operationHints[operation.id]} disabled={operation.id === "structure" ? pending || !canFormat : !canStart || needsNote} onClick={() => onRun(operation.id)}><Icon size={14} aria-hidden="true" />{operation.label}</button>;
             })}
           </div>
           {compactMode && <button className="ai-show-advanced ais-more" onClick={onExpandAdvanced}>Ещё команды и своя инструкция</button>}
