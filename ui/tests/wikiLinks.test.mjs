@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url);
 const esbuild = require("esbuild");
 const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "nh4-ui-")), "links.mjs");
 await esbuild.build({ entryPoints: [path.resolve("src/wikiLinks.ts")], bundle: true, format: "esm", platform: "node", outfile: out, logLevel: "silent" });
-const { extractLinks, buildLinkIndex, normTitle, wikiLinkText } = await import(pathToFileURL(out).href);
+const { extractLinks, buildLinkIndex, normTitle, wikiLinkText, planLinkRenames } = await import(pathToFileURL(out).href);
 
 const para = (text) => [{ type: "paragraph", content: text, children: [] }];
 
@@ -92,4 +92,78 @@ test("renaming rewrites links inside table cells and keeps an untouched table id
   const same = renameLinkInBlocks([table], "Нет такой", "X");
   assert.equal(same.blocks[0], table);
   assert.equal(same.count, 0);
+});
+
+test("дубли заголовков: ссылка ведёт на последнюю открытую заметку, выбор детерминирован", () => {
+  const docs = [
+    { id: "stale", title: "Дубликат", lastOpenedAt: 100 },
+    { id: "fresh", title: "дубликат ", lastOpenedAt: 500 },   // то же имя после нормализации, открыта позже
+    { id: "never", title: "Дубликат" },                        // без lastOpenedAt — не перетягивает
+    { id: "other", title: "Другая" },
+  ];
+  const index = buildLinkIndex(docs, {});
+  assert.equal(index.byTitle.get("дубликат"), "fresh");
+  assert.equal(index.byTitle.get("другая"), "other");
+  // перестройка индекса в том же порядке даёт тот же выбор
+  assert.equal(buildLinkIndex(docs, {}).byTitle.get("дубликат"), "fresh");
+});
+
+test("дубли без сведений об открытии: стабильно выбирается первая заметка", () => {
+  const docs = [
+    { id: "a", title: "Заметка" },
+    { id: "b", title: "заметка" },
+  ];
+  assert.equal(buildLinkIndex(docs, {}).byTitle.get("заметка"), "a");
+});
+
+test("удалённая заметка не выигрывает дубль заголовка", () => {
+  const docs = [
+    { id: "live", title: "Имя", lastOpenedAt: 10 },
+    { id: "trashed", title: "Имя", lastOpenedAt: 999, deletedAt: "2026-10-16" },
+  ];
+  assert.equal(buildLinkIndex(docs, {}).byTitle.get("имя"), "live");
+});
+
+test("planLinkRenames: переписывает [[ссылки]] у других заметок и обновляет settled", () => {
+  const settled = new Map([["n1", "Старое"]]);
+  const live = [{ id: "n1", title: "Новое" }, { id: "n2", title: "Читатель" }];
+  const contents = { n2: para("См. [[Старое]] и [[Другое]].") };
+  const plan = planLinkRenames(live, contents, settled);
+  assert.equal(plan.total, 1);
+  assert.deepEqual(Object.keys(plan.updates), ["n2"]);
+  assert.equal(plan.updates.n2[0].content, "См. [[Новое]] и [[Другое]].");
+  assert.equal(settled.get("n1"), "Новое");
+});
+
+test("planLinkRenames: без устоявшегося «до» ничего не делает, но запоминает заголовки", () => {
+  const settled = new Map();
+  const live = [{ id: "n1", title: "A" }, { id: "n2", title: "B" }];
+  const plan = planLinkRenames(live, { n2: para("[[A]]") }, settled);
+  assert.equal(plan.total, 0);
+  assert.deepEqual(plan.updates, {});
+  assert.equal(settled.get("n1"), "A");
+  assert.equal(settled.get("n2"), "B");
+});
+
+test("planLinkRenames: write-through не переписывается, неоднозначное переименование пропускается", () => {
+  const settled = new Map([["n1", "Старое"]]);
+  const live = [
+    { id: "n1", title: "Новое" },
+    { id: "n2", title: "Читатель", writeThrough: true },
+    { id: "n3", title: "Старое" },           // старое название занято другой живой заметкой
+  ];
+  const contents = { n2: para("[[Старое]]"), n3: para("[[Старое]]") };
+  const plan = planLinkRenames(live, contents, settled);
+  assert.equal(plan.total, 0);
+  assert.deepEqual(plan.updates, {});
+});
+
+test("planLinkRenames: цепочка переименований за один проход применяется последовательно", () => {
+  const settled = new Map([["n1", "Alpha"], ["n2", "Beta"]]);
+  const live = [{ id: "n1", title: "Gamma" }, { id: "n2", title: "Delta" }, { id: "n3", title: "Читатель" }];
+  const contents = { n3: para("[[Alpha]] и [[Beta]]") };
+  const plan = planLinkRenames(live, contents, settled);
+  assert.equal(plan.total, 2);
+  // второе переименование применено поверх результата первого (updates как источник), а не исходного текста
+  assert.equal(plan.updates.n3[0].content, "[[Gamma]] и [[Delta]]");
 });

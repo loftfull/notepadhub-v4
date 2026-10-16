@@ -42,7 +42,7 @@ export function linksOfBlocks(blocks: LooseBlock[] | undefined): LinkRef[] {
   return links;
 }
 
-export type DocLike = { id: string; title: string; deletedAt?: unknown };
+export type DocLike = { id: string; title: string; deletedAt?: unknown; lastOpenedAt?: number; writeThrough?: boolean };
 export type LinkIndex = {
   byTitle: Map<string, string>;
   outgoing: (id: string) => Array<LinkRef & { id: string | null }>;
@@ -52,7 +52,17 @@ export type LinkIndex = {
 export function buildLinkIndex(docs: DocLike[], contents: Record<string, LooseBlock[]>): LinkIndex {
   const live = docs.filter((doc) => !doc.deletedAt);
   const byTitle = new Map<string, string>();
-  for (const doc of live) { const key = normTitle(doc.title); if (key && !byTitle.has(key)) byTitle.set(key, doc.id); }
+  const openedAt = new Map<string, number>();
+  for (const doc of live) {
+    const key = normTitle(doc.title);
+    if (!key) continue;
+    const stamp = typeof doc.lastOpenedAt === "number" ? doc.lastOpenedAt : 0;
+    const prev = byTitle.get(key);
+    if (prev === undefined) { byTitle.set(key, doc.id); openedAt.set(key, stamp); continue; }
+    // duplicate titles: the most recently opened note wins — deterministic and matches what the user
+    // means by "the one I actually use"; ties keep the earlier note, so rebuilds never flip the choice
+    if (stamp > (openedAt.get(key) ?? 0)) { byTitle.set(key, doc.id); openedAt.set(key, stamp); }
+  }
   const incoming = new Map<string, Array<{ id: string; title: string; snippet: string }>>();
   for (const doc of live) {
     for (const link of linksOfBlocks(contents[doc.id])) {
@@ -130,4 +140,41 @@ export function renameLinkInBlocks<B extends { content?: unknown; children?: unk
   });
   const next = walk(blocks);
   return count === 0 ? { blocks, count: 0 } : { blocks: next, count };
+}
+
+export type RenamePlan = { updates: Record<string, LooseBlock[]>; total: number };
+
+/**
+ * Планирует переписывание входящих [[ссылок]] после того, как новое название заметки устоялось.
+ * `settled` — последние устоявшиеся заголовки по id; карта ОБНОВЛЯЕТСЯ на месте, чтобы между
+ * вызовами видеть проход времени. Правила (те же, что были инлайном в App.tsx):
+ *  - заметка без устоявшегося «до» или без изменения заголовка не трогает ничего;
+ *  - если старое название осталась за другой живой заметкой, ссылки неоднозначны — переписывание пропускается;
+ *  - write-through заметки не переписываются никогда: реальный файл на диске не должен
+ *    меняться из-за переименования ссылки;
+ *  - несколько переименований за один проход применяются цепочкой (updates переиспользуется как источник).
+ */
+export function planLinkRenames(
+  live: DocLike[],
+  contents: Record<string, LooseBlock[]>,
+  settled: Map<string, string>,
+): RenamePlan {
+  const updates: Record<string, LooseBlock[]> = {};
+  let total = 0;
+  for (const doc of live) {
+    const before = settled.get(doc.id);
+    settled.set(doc.id, doc.title);
+    if (before === undefined || before === doc.title || !doc.title.trim()) continue;
+    const oldKey = normTitle(before);
+    // another note with the old title would make the links ambiguous: leave them alone
+    if (live.some((other) => other.id !== doc.id && normTitle(other.title) === oldKey)) continue;
+    for (const other of live) {
+      if (other.id === doc.id || other.writeThrough) continue;     // never rewrite a real file on disk because of a link rename
+      const blocks = updates[other.id] ?? contents[other.id];
+      if (!blocks || !linksOfBlocks(blocks).some((link) => normTitle(link.target) === oldKey)) continue;
+      const renamed = renameLinkInBlocks(blocks, before, doc.title);
+      if (renamed.count > 0) { updates[other.id] = renamed.blocks as LooseBlock[]; total += renamed.count; }
+    }
+  }
+  return { updates, total };
 }

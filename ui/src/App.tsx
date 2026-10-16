@@ -252,7 +252,7 @@ function Inspector({ headings, onJump, onClose, activeDoc, folder, onMove }: Ins
 }
 
 /** Tags are kept in the same single string field as in 3.0.5 ("a, b"), so older versions still read it. */
-const parseTags = (value: string | undefined): string[] => [...new Set((value ?? "").split(/[,;]/).map((t) => t.replace(/^#/, "").trim().slice(0, 20)).filter(Boolean))].slice(0, 8);
+const parseTags = (value: string | undefined): string[] => [...new Set((value ?? "").split(/[,;]/).map((t) => t.trim().replace(/^#/, "").trim().slice(0, 20)).filter(Boolean))].slice(0, 8);
 
 export default function App({ initial, sync }: { initial: LoadedHost; sync: HostSync }) {
   const [initialState] = useState(() => initial.state);
@@ -2015,7 +2015,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     const total = flatBlocks(editor.document as unknown as Array<{ id: string; children?: unknown[] }>).length;
     setFormDialog({ kind: "goto", title: "Перейти к строке", value: "", hint: `Номер строки от 1 до ${total}` });
   }, [editor]);
-  const printNote = useCallback(() => { window.print(); }, []);
+  const printNote = useCallback(() => { if (activeIdRef.current) window.print(); else setNotice("Откройте заметку для печати"); }, []);
   const exportText = useCallback(() => {
     const text = (activeId && contents[activeId] ? blocksToText(contents[activeId] as LooseBlock[]) : "").replace(/\n/g, "\r\n");
     const url = URL.createObjectURL(new Blob(["\ufeff" + text], { type: "text/plain;charset=utf-8" }));
@@ -2203,7 +2203,6 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
       if (event.key === "F11") { event.preventDefault(); setFocusMode((v) => !v); return; }
       if (event.key === "F5" && !event.ctrlKey) { event.preventDefault(); actionsRef.current.insertDateTime(); return; }
       if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.code === "KeyG") { event.preventDefault(); actionsRef.current.goToLine(); return; }
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.code === "KeyP") { event.preventDefault(); actionsRef.current.printNote(); return; }
       if (event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) { event.preventDefault(); goHistoryRef.current(event.key === "ArrowLeft" ? -1 : 1); return; }
       const action = matchShortcut(event);
       if (!action) return;

@@ -809,11 +809,6 @@
 .app-shell.font-serif .bn-container { --bn-font-family: Georgia, "Cambria", "Times New Roman", serif; }
 .app-shell.font-mono .bn-container { --bn-font-family: "Cascadia Mono", Consolas, "Courier New", monospace; }
 
-@media print {
-  .app-shell .topbar, .app-shell .sidebar, .app-shell .document-tabs, .app-shell .statusbar, .app-shell .inspector-panel, .app-shell .focus-exit, .app-shell .find-bar, .app-shell .toast { display: none !important; }
-  .app-shell, .app-shell .workspace, .app-shell .main-panel { display: block !important; height: auto !important; overflow: visible !important; background: #fff !important; }
-  .app-shell .editor-card { box-shadow: none !important; border: 0 !important; width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; }
-}
 
 /* one interface font for every control; the brand and the headings of the app share it, weights 500 / 600 only */
 .app-shell { --font-ui: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; }
