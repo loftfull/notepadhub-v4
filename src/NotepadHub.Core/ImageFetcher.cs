@@ -28,7 +28,7 @@ public sealed class ImageFetcher : IDisposable
             ConnectCallback = async (context, ct) =>
             {
                 var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, ct);
-                var allowed = addresses.Where(a => _allowLocal || IsPublic(a)).ToArray();
+                var allowed = addresses.Where(a => _allowLocal || NetworkGuard.IsPublicAddress(a)).ToArray();
                 if (allowed.Length == 0) throw new HttpRequestException("Адрес картинки не относится к публичному интернету.");
                 var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
                 try
@@ -44,34 +44,8 @@ public sealed class ImageFetcher : IDisposable
         _http.DefaultRequestHeaders.Accept.ParseAdd("image/png,image/jpeg,image/gif,image/webp,*/*;q=0.1");
     }
 
-    public static bool IsPublic(IPAddress a)
-    {
-        if (a.IsIPv4MappedToIPv6) a = a.MapToIPv4();
-        if (IPAddress.IsLoopback(a) || a.Equals(IPAddress.Any) || a.Equals(IPAddress.IPv6Any) || a.Equals(IPAddress.None)) return false;
-        if (a.AddressFamily == AddressFamily.InterNetworkV6)
-        {
-            if (a.IsIPv6LinkLocal || a.IsIPv6SiteLocal || a.IsIPv6Multicast || a.IsIPv6Teredo) return false;
-            var b6 = a.GetAddressBytes();
-            if ((b6[0] & 0xFE) == 0xFC) return false;   // fc00::/7 unique local
-            // addresses that carry an IPv4 address inside are judged by that address
-            if (b6[0] == 0x00 && b6[1] == 0x64 && b6[2] == 0xFF && b6[3] == 0x9B && b6.Take(12).Skip(4).All(x => x == 0)) return IsPublic(new IPAddress(b6.Skip(12).ToArray()));   // 64:ff9b::/96 (NAT64)
-            if (b6[0] == 0x20 && b6[1] == 0x02) return IsPublic(new IPAddress(b6.Skip(2).Take(4).ToArray()));                                                                       // 2002::/16 (6to4)
-            if (b6.Take(12).All(x => x == 0)) return IsPublic(new IPAddress(b6.Skip(12).ToArray()));                                                                                 // ::a.b.c.d (IPv4-compatible)
-            return true;
-        }
-        var b = a.GetAddressBytes();
-        if (b[0] == 10 || b[0] == 127 || b[0] == 0) return false;
-        if (b[0] == 172 && b[1] >= 16 && b[1] <= 31) return false;
-        if (b[0] == 192 && b[1] == 168) return false;
-        if (b[0] == 169 && b[1] == 254) return false;       // link-local, cloud metadata
-        if (b[0] == 100 && b[1] >= 64 && b[1] <= 127) return false;   // carrier-grade NAT
-        if (b[0] == 198 && (b[1] == 18 || b[1] == 19)) return false;   // benchmarking
-        if (b[0] == 192 && b[1] == 0 && (b[2] == 0 || b[2] == 2)) return false;   // protocol assignments, documentation
-        if (b[0] == 198 && b[1] == 51 && b[2] == 100) return false;   // documentation
-        if (b[0] == 203 && b[1] == 0 && b[2] == 113) return false;    // documentation
-        if (b[0] >= 224) return false;                        // multicast and reserved
-        return true;
-    }
+    /// <summary>Public-address rules live in <see cref="NetworkGuard"/>; this stays for the callers that name the fetcher.</summary>
+    public static bool IsPublic(IPAddress a) => NetworkGuard.IsPublicAddress(a);
 
     public static bool IsAllowedUrl(string url, out Uri uri) =>
         Uri.TryCreate(url, UriKind.Absolute, out uri!) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) && string.IsNullOrEmpty(uri.UserInfo);

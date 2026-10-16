@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { TRANSFORMATIONS, DEFAULT_SELECTION, normalizeSelection, loadSelection, insightMarkdown, MAX_INSTRUCTION, INSIGHTS_HEADING } from "../src/transformations.ts";
+import { loadTs } from "./helpers/loadTs.mjs";
+const { TRANSFORMATIONS, DEFAULT_SELECTION, normalizeSelection, loadSelection, insightMarkdown, MAX_INSTRUCTION, INSIGHTS_HEADING } = await loadTs("../src/transformations.ts");
 
 test("five transformations, two on by default, ids are unique", () => {
   assert.equal(TRANSFORMATIONS.length, 5);
@@ -39,7 +40,7 @@ test("a repeated title heading from the model is not doubled", () => {
   assert.equal((out.match(/Краткое содержание/g) ?? []).length, 1);
 });
 
-import { sanitizeCustom, loadCustom, saveCustom, newCustomId } from "../src/transformations.ts";
+const { sanitizeCustom, loadCustom, saveCustom, newCustomId } = await loadTs("../src/transformations.ts");
 
 test("custom transformations are validated, saved and reloaded", () => {
   const ok = sanitizeCustom({ id: newCustomId(), title: "  Сроки   и даты ", prompt: "Выпиши все даты и сроки списком." });

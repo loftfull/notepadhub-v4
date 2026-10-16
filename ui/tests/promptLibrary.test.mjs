@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  addPromptRecipe,
-  deletePromptRecipe,
-  MAX_PROMPT_RECIPES,
-  parsePromptLibrary,
-  serializePromptLibrary,
-  updatePromptRecipe,
-} from "../src/promptLibrary.ts";
+import { loadTs } from "./helpers/loadTs.mjs";
+const { addPromptRecipe, deletePromptRecipe, MAX_PROMPT_RECIPES, parsePromptLibrary, serializePromptLibrary, updatePromptRecipe, } = await loadTs("../src/promptLibrary.ts");
 
 const recipe = { id: "r1", name: "Сводка", instruction: "Сожми текст." };
 

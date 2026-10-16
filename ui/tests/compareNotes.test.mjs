@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { compareNotes, paragraphCloseness } from "../src/compareNotes.ts";
+import { loadTs } from "./helpers/loadTs.mjs";
+const { compareNotes, paragraphCloseness } = await loadTs("../src/compareNotes.ts");
 
 test("identical notes are all the same and 100 percent similar", () => {
   const r = compareNotes(["Раз.", "Два."], ["Раз.", "Два."]);

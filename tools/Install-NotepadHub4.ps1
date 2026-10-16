@@ -3,17 +3,21 @@
   - Ставит приложение в %LOCALAPPDATA%\NotepadHub4\app. Папка данных (%LOCALAPPDATA%\NotepadHub\data-v3) не копируется и не удаляется.
   - Создаёт ярлыки "Notepad Hub 4" на рабочем столе и в меню Пуск. Ярлыки и файлы Notepad Hub 3 не меняются.
   - Контекстное меню Проводника ("Открыть в Notepad Hub 4") добавляется только с ключом -ContextMenu.
-  - Ассоциацию .txt скрипт НЕ меняет (это системная настройка: делайте её сами в «Параметры → Приложения по умолчанию»).
+  - Список «Открыть с помощью» для .txt добавляется только с ключом -OpenWithTxt (только HKCU;
+    программа по умолчанию для .txt НЕ меняется — это по-прежнему делается в «Параметры → Приложения по умолчанию»).
+    Без этого ключа скрипт ассоциации .txt не трогает.
   - Две версии не должны быть открыты одновременно на одних данных: v4 при запуске это проверяет.
 
   Просмотр без изменений:   .\Install-NotepadHub4.ps1 -WhatIf
   Установка:                .\Install-NotepadHub4.ps1
+  Установка + «Открыть с помощью» для .txt:  .\Install-NotepadHub4.ps1 -OpenWithTxt
   Удаление программы:       .\Install-NotepadHub4.ps1 -Uninstall      (заметки остаются на месте)
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [switch]$Uninstall,
     [switch]$ContextMenu,
+    [switch]$OpenWithTxt,        # добавить Notepad Hub 4 в «Открыть с помощью» для .txt (HKCU, не меняет программу по умолчанию)
     [switch]$DesktopOnly,       # только ярлык на рабочем столе, без меню Пуск
     [string]$Source
 )
@@ -27,6 +31,9 @@ $startMenu = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
 $links = @((Join-Path $desktop 'Notepad Hub 4.lnk'), (Join-Path $startMenu 'Notepad Hub 4.lnk'))
 $createLinks = if ($DesktopOnly) { @($links[0]) } else { $links }
 $shellKey = 'HKCU:\Software\Classes\*\shell\NotepadHub4'
+$txtProgId = 'HKCU:\Software\Classes\NotepadHub4.txt'
+$txtProgIdName = 'NotepadHub4.txt'
+$txtOpenWith = 'HKCU:\Software\Classes\.txt\OpenWithProgids'
 
 if (@(Get-Process -Name 'NotepadHub4' -ErrorAction SilentlyContinue).Count -gt 0) {
     throw 'Notepad Hub 4 сейчас запущен. Закройте окно и повторите.'
@@ -35,6 +42,13 @@ if (@(Get-Process -Name 'NotepadHub4' -ErrorAction SilentlyContinue).Count -gt 0
 if ($Uninstall) {
     foreach ($l in $links) { if (Test-Path -LiteralPath $l) { if ($PSCmdlet.ShouldProcess($l, 'Удалить ярлык')) { Remove-Item -LiteralPath $l -Force } } }
     if (Test-Path $shellKey) { if ($PSCmdlet.ShouldProcess($shellKey, 'Удалить пункт контекстного меню')) { Remove-Item -Path $shellKey -Recurse -Force } }
+    if ($PSCmdlet.ShouldProcess($txtProgId, 'Удалить запись «Открыть с помощью» для .txt')) {
+        if (Test-Path $txtOpenWith) {
+            Remove-ItemProperty -Path $txtOpenWith -Name $txtProgIdName -ErrorAction SilentlyContinue
+            if (-not @(Get-Item -Path $txtOpenWith).Property) { Remove-Item -Path $txtOpenWith -Recurse -Force }
+        }
+        if (Test-Path $txtProgId) { Remove-Item -Path $txtProgId -Recurse -Force }
+    }
     if (Test-Path -LiteralPath $appDir) { if ($PSCmdlet.ShouldProcess($appDir, 'Удалить программу')) { Remove-Item -LiteralPath $appDir -Recurse -Force } }
     Write-Host 'Программа удалена. Заметки и резервные копии не тронуты.' -ForegroundColor Green
     return
@@ -80,6 +94,16 @@ try {
             Set-Item -Path $shellKey -Value 'Открыть в Notepad Hub 4'
             Set-ItemProperty -Path $shellKey -Name 'Icon' -Value $exe -Force
             Set-Item -Path (Join-Path $shellKey 'command') -Value ('"' + $exe + '" "%1"')
+        }
+        if ($OpenWithTxt) {
+            New-Item -Path (Join-Path $txtProgId 'DefaultIcon') -Force | Out-Null
+            New-Item -Path (Join-Path $txtProgId 'shell\open\command') -Force | Out-Null
+            Set-Item -Path $txtProgId -Value 'Notepad Hub 4'
+            Set-Item -Path (Join-Path $txtProgId 'DefaultIcon') -Value ($exe + ',0')
+            Set-Item -Path (Join-Path $txtProgId 'shell\open\command') -Value ('"' + $exe + '" "%1"')
+            New-Item -Path $txtOpenWith -Force | Out-Null
+            New-ItemProperty -Path $txtOpenWith -Name $txtProgIdName -PropertyType None -Force | Out-Null
+            Write-Host 'Notepad Hub 4 добавлен в список «Открыть с помощью» для .txt (программа по умолчанию не меняется).'
         }
         Write-Host 'Notepad Hub 4 установлен рядом с версией 3.' -ForegroundColor Green
         Write-Host "Программа: $exe"

@@ -52,11 +52,13 @@ public partial class MainWindow : Window
         InitializeComponent();
         _store = store; _paths = paths;
         AiService? ai = null;
-        try { ai = new AiService(new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, new DpapiSecretStore(paths.Root), m => HostLog.Write(m), null, new FileAiUsageStore(paths.Root, m => HostLog.Write(m)), null, ConfirmCloudSend, new CompatServiceStore(paths.Root)); }
+        // two clients: a plain one for servers on this computer (Ollama, LM Studio), and a guarded one for the internet
+        // (OpenRouter, a non-local OpenAI-compatible service): every connection is pinned to public addresses, no proxy, no cookies
+        try { ai = new AiService(new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, new DpapiSecretStore(paths.Root), m => HostLog.Write(m), null, new FileAiUsageStore(paths.Root, m => HostLog.Write(m)), null, ConfirmCloudSend, new CompatServiceStore(paths.Root), NetworkGuard.CreatePublicOnlyHttpClient(Timeout.InfiniteTimeSpan)); }
         catch (Exception ex)
         {
             HostLog.Write("ai: OLLAMA_HOST rejected (" + ex.Message + "); using the local default");
-            try { ai = new AiService(new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, new DpapiSecretStore(paths.Root), m => HostLog.Write(m), new Uri("http://127.0.0.1:11434"), new FileAiUsageStore(paths.Root, m => HostLog.Write(m)), null, ConfirmCloudSend, new CompatServiceStore(paths.Root)); } catch { }
+            try { ai = new AiService(new HttpClient { Timeout = Timeout.InfiniteTimeSpan }, new DpapiSecretStore(paths.Root), m => HostLog.Write(m), new Uri("http://127.0.0.1:11434"), new FileAiUsageStore(paths.Root, m => HostLog.Write(m)), null, ConfirmCloudSend, new CompatServiceStore(paths.Root), NetworkGuard.CreatePublicOnlyHttpClient(Timeout.InfiniteTimeSpan)); } catch { }
         }
         _bridge = new BridgeDispatcher(store, new HostUi(this), App.Version, ai, Raise);
         RestoreGeometry();

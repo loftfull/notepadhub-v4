@@ -37,6 +37,12 @@ test("tabs, new note and help", () => {
   assert.equal(matchShortcut({ code: "F1", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false }), "help");
 });
 
+test("printing is matched by the physical key, so the Russian layout works too", () => {
+  assert.equal(matchShortcut(ev("KeyP")), "print");
+  assert.equal(matchShortcut(ev("KeyP", { key: "з" })), "print");
+  assert.equal(matchShortcut(ev("KeyP", { ctrlKey: false })), null);
+});
+
 test("plain typing, Alt combinations and unknown chords are left alone", () => {
   assert.equal(matchShortcut(ev("KeyF", { ctrlKey: false })), null);
   assert.equal(matchShortcut(ev("KeyF", { altKey: true })), null);
@@ -46,5 +52,5 @@ test("plain typing, Alt combinations and unknown chords are left alone", () => {
 
 test("every shortcut in the handler is documented in the help list", () => {
   const text = JSON.stringify(SHORTCUT_HELP);
-  for (const key of ["Ctrl N", "Ctrl W", "Ctrl S", "Ctrl K", "Ctrl F", "Ctrl H", "Ctrl L", "Ctrl J", "F1"]) assert.ok(text.includes(key), key);
+  for (const key of ["Ctrl N", "Ctrl W", "Ctrl S", "Ctrl K", "Ctrl F", "Ctrl H", "Ctrl L", "Ctrl J", "Ctrl P", "F1"]) assert.ok(text.includes(key), key);
 });

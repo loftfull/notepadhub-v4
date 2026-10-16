@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { streamAiTask } from "../src/ai.ts";
+import { loadTs } from "./helpers/loadTs.mjs";
+const { streamAiTask } = await loadTs("../src/ai.ts");
 
 test("rejects whole-note structure outside note scope without starting inference", async () => {
   const originalFetch = globalThis.fetch;

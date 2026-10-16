@@ -704,13 +704,55 @@ public sealed class NoteStore : IDisposable
 
         // keep the file's own encoding and line endings: opening and saving must not rewrite a file the user did not edit
         var (encoding, bom) = original.Length > 0 ? DetectEncoding(original) : (new UTF8Encoding(false), false);
-        if (original.Length > 0 && DecodeText(original, lenient: true).Contains("\r\n") && !content.Contains('\r')) content = content.Replace("\n", "\r\n");
+        if (original.Length > 0) content = MergeLineEndings(DecodeText(original, lenient: true), content);
         byte[] body;
         try { body = encoding.GetBytes(content); }
         catch (EncoderFallbackException) { throw new InvalidOperationException("В тексте есть символы, которых нет в кодировке файла (Windows-1251). Сохранение отменено, чтобы не испортить файл."); }
         var bytes = bom ? encoding.GetPreamble().Concat(body).ToArray() : body;
         JsonIO.WriteAllBytesAtomic(n.SourcePath, bytes);
         lock (_sync) { n.SourceLastWriteUtc = File.GetLastWriteTimeUtc(n.SourcePath).ToString("o", CultureInfo.InvariantCulture); SaveMeta(n); return n.Clone(); }
+    }
+
+    /// <summary>
+    /// Line endings of the file win for every line the user did not touch. The editor's text mirror is always LF, so a
+    /// file with mixed endings (CRLF and LF) used to come back all-CRLF after a write-through save (QA2 defect N-06):
+    /// unchanged lines keep their own ending, changed and added lines get the file's dominant ending, the last line gets none.
+    /// Content that already carries CR (a plain-text caller, not the editor) and files without a single CRLF are returned as they are.
+    /// </summary>
+    public static string MergeLineEndings(string originalText, string contentText)
+    {
+        if (contentText.Contains('\r')) return contentText;
+        if (!originalText.Contains("\r\n")) return contentText;
+
+        // split the original into (text, ending) pairs
+        var origLines = new List<string>();
+        var origEndings = new List<string>();
+        var i = 0;
+        while (i < originalText.Length)
+        {
+            var nl = originalText.IndexOf('\n', i);
+            if (nl < 0) { origLines.Add(originalText[i..]); origEndings.Add(""); break; }
+            var cr = nl > i && originalText[nl - 1] == '\r';
+            origLines.Add(originalText[i..(cr ? nl - 1 : nl)]);
+            origEndings.Add(cr ? "\r\n" : "\n");
+            i = nl + 1;
+            if (i == originalText.Length) { origLines.Add(""); origEndings.Add(""); }
+        }
+
+        var contentLines = contentText.Split('\n');
+        var crlf = 0; var lf = 0;
+        for (var k = 0; k + 1 < origEndings.Count; k++) { if (origEndings[k] == "\r\n") crlf++; else lf++; }
+        var dominant = crlf >= lf ? "\r\n" : "\n";
+
+        var sb = new StringBuilder(contentText.Length + contentLines.Length);
+        for (var k = 0; k < contentLines.Length; k++)
+        {
+            sb.Append(contentLines[k]);
+            if (k == contentLines.Length - 1) break;   // the mirror never ends with a newline: do not add one
+            var unchanged = k < origLines.Count && origEndings[k].Length > 0 && string.Equals(origLines[k], contentLines[k], StringComparison.Ordinal);
+            sb.Append(unchanged ? origEndings[k] : dominant);
+        }
+        return sb.ToString();
     }
 
     /// <summary>The encoding a file was read as: its BOM, else UTF-8 when valid, else Windows-1251 (what <see cref="DecodeText"/> falls back to). cp1251 refuses characters it cannot represent instead of writing '?'.</summary>

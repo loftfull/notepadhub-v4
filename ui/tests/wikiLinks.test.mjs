@@ -75,3 +75,21 @@ test("titles with brackets or pipes resolve the same way on both sides of the in
   const index = buildLinkIndex([{ id: "a", title: "Заметка [x] | y" }, { id: "b", title: "B" }], { a: para(""), b: para("см. [[Заметка x y]]") });
   assert.deepEqual(index.backlinks("a").map((l) => l.id), ["b"]);
 });
+
+test("renaming rewrites links inside table cells and keeps an untouched table identical", () => {
+  const cell = (text) => [{ type: "text", text, styles: {} }];
+  const table = {
+    type: "table",
+    content: { type: "tableContent", rows: [{ cells: [cell("см. [[Старое]]"), cell("обычный текст")] }, { cells: [cell("[[Старое|подпись]]"), cell("[[Другое]]")] }] },
+    children: [],
+  };
+  const r = renameLinkInBlocks([table], "Старое", "Новое");
+  assert.equal(r.count, 2);
+  assert.equal(r.blocks[0].content.rows[0].cells[0][0].text, "см. [[Новое]]");
+  assert.equal(r.blocks[0].content.rows[1].cells[0][0].text, "[[Новое|подпись]]");
+  assert.equal(r.blocks[0].content.rows[0].cells[1][0].text, "обычный текст");
+  assert.equal(r.blocks[0].content.rows[1].cells[1][0].text, "[[Другое]]");
+  const same = renameLinkInBlocks([table], "Нет такой", "X");
+  assert.equal(same.blocks[0], table);
+  assert.equal(same.count, 0);
+});

@@ -1,0 +1,52 @@
+# Непрерывная проверка обоих слоёв приложения.
+#
+# До этого CI в репозитории не было: тесты запускались только вручную, и 11 из 19 файлов
+# тестов интерфейса молча не работали на минимальном заявленном Node 20 (прямые импорты .ts).
+# Теперь каждая проверка гоняется на каждом push и PR.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ui:
+    name: Интерфейс: тесты и сборка (Node 20 — минимальная заявленная версия)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  core:
+    name: Ядро и окно (Windows, .NET 8)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      # интерфейс собирается первым: Host.csproj кладёт ui/dist рядом с exe (Content glob)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci --prefix ui
+      - run: npm run build --prefix ui
+      - run: dotnet build NotepadHub.sln -c Release
+      - run: dotnet test tests/NotepadHub.Core.Tests -c Release --no-build
+      # QA2 — «набор доказательств» (docs/QA_REPORT_2.md): по решению команды он вне sln и вне
+      # основного прогона; часть тестов падает ожидаемо (предусловие Q2_01a закрепляет старое
+      # поведение). Шаг виден в логах, но сборку не блокирует.
+      - name: QA2 (неблокирующе, см. docs/QA_REPORT_2.md)
+        run: dotnet test tests/QA2/NotepadHub.QA2.Tests -c Release
+        continue-on-error: true

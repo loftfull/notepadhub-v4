@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { defaultParams, cropRect, outputSize, cssFilter, isUnchanged } from "../src/imageEdit.ts";
+import { loadTs } from "./helpers/loadTs.mjs";
+const { defaultParams, cropRect, outputSize, cssFilter, isUnchanged } = await loadTs("../src/imageEdit.ts");
 
 test("nothing changed means nothing to save", () => {
   assert.equal(isUnchanged(defaultParams()), true);

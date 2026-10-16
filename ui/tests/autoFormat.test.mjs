@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { autoFormat, splitParagraph, fixTypography, boldLeadTerm, describeReport, wordSimilarity, isFormattingOnly } from "../src/autoFormat.ts";
+import { loadTs } from "./helpers/loadTs.mjs";
+const { autoFormat, splitParagraph, fixTypography, boldLeadTerm, describeReport, wordSimilarity, isFormattingOnly } = await loadTs("../src/autoFormat.ts");
 
 const p = (text) => ({ type: "paragraph", props: {}, content: text });
 const h = (text, level = 1) => ({ type: "heading", props: { level }, content: text });

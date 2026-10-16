@@ -11,6 +11,7 @@ import "./design-system.css";
 import "./ai-assistant.css";
 import "./layout-v4.css";
 import "./ai-studio.css";
+import "./print.css";
 
 const root = ReactDOM.createRoot(document.getElementById("root")!);
 

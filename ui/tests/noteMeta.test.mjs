@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { suggestTitle, suggestTags, parseMetaAnswer, META_INSTRUCTION } from "../src/noteMeta.ts";
+import { loadTs } from "./helpers/loadTs.mjs";
+const { suggestTitle, suggestTags, parseMetaAnswer, META_INSTRUCTION } = await loadTs("../src/noteMeta.ts");
 
 test("the title is the first heading, else the start of the first sentence, without the final full stop", () => {
   assert.equal(suggestTitle([{ heading: true, text: "Итоги встречи" }, { text: "Обсудили бюджет." }]), "Итоги встречи");

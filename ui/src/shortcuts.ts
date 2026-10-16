@@ -4,7 +4,7 @@
  */
 export type ShortcutAction =
   | "save" | "search" | "find" | "replace" | "link" | "closeTab" | "ai" | "newNote"
-  | "zoomIn" | "zoomOut" | "zoomReset" | "nextTab" | "prevTab" | "help";
+  | "zoomIn" | "zoomOut" | "zoomReset" | "nextTab" | "prevTab" | "print" | "help";
 
 type KeyLike = { code: string; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; altKey: boolean };
 
@@ -33,6 +33,7 @@ export function matchShortcut(event: KeyLike): ShortcutAction | null {
     case "Equal": case "NumpadAdd": return "zoomIn";
     case "Minus": case "NumpadSubtract": return "zoomOut";
     case "Digit0": case "Numpad0": return "zoomReset";
+    case "KeyP": return "print";
     default: return null;
   }
 }
@@ -54,6 +55,7 @@ export const SHORTCUT_HELP: Array<{ group: string; items: Array<{ keys: string; 
   ] },
   { group: "Вид и помощники", items: [
     { keys: "Ctrl + / Ctrl − / Ctrl 0", label: "Масштаб текста" },
+    { keys: "Ctrl P", label: "Печать заметки" },
     { keys: "Ctrl J", label: "AI-помощник" },
     { keys: "F1 или Ctrl /", label: "Это окно" },
   ] },

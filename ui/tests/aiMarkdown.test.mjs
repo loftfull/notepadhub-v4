@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseInline, parseMarkdown, stripMarkdown, toInlineContent, hasMarkdown } from "../src/aiMarkdown.ts";
+import { loadTs } from "./helpers/loadTs.mjs";
+const { parseInline, parseMarkdown, stripMarkdown, toInlineContent, hasMarkdown } = await loadTs("../src/aiMarkdown.ts");
 
 test("headings lose their # and keep their level", () => {
   const blocks = parseMarkdown("## Итоги\n\nТекст.\n\n#### Глубже");

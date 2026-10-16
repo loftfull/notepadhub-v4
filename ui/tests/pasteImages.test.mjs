@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { embeddedBase64, isWebAddress, MAX_PASTED_PICTURES } from "../src/pasteImages.ts";
+import { loadTs } from "./helpers/loadTs.mjs";
+const { embeddedBase64, isWebAddress, MAX_PASTED_PICTURES } = await loadTs("../src/pasteImages.ts");
 
 test("only png, jpeg, gif and webp data addresses are accepted (no svg)", () => {
   assert.equal(embeddedBase64("data:image/png;base64,AAAA"), "AAAA");

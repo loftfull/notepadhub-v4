@@ -3,6 +3,7 @@ import { loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
+import { isLocalDevAiRequest } from "./dev/aiDevGuard";
 
 const taskInstructions = {
   proofread: "Исправь только грамматику и орфографию. Не добавляй, не удаляй и не меняй факты; оставь исходные блоки на местах.",
@@ -369,6 +370,13 @@ function localAiPlugin(openRouterApiKey: string): Plugin {
         const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
         if (!pathname.startsWith("/api/ai/")) {
           next();
+          return;
+        }
+
+        // The AI route may hold a real OPENROUTER_API_KEY from .env.local: only local pages and local tools
+        // may call it (Origin/Host guard — see dev/aiDevGuard.ts and tests/devGuard.test.mjs).
+        if (!isLocalDevAiRequest(request.headers as Record<string, string | string[] | undefined>)) {
+          sendJson(response, 403, { error: "AI-маршрут принимает запросы только от локальных страниц (проверка Origin/Host)." });
           return;
         }
 

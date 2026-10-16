@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseAiAnalysis } from "../src/aiAnalysis.ts";
+import { loadTs } from "./helpers/loadTs.mjs";
+const { parseAiAnalysis } = await loadTs("../src/aiAnalysis.ts");
 
 const source = { marker: "B2", blockId: "block-exact", label: "Подтвердить бюджет" };
 const result = {

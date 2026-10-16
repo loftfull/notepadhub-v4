@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { blocksToText, textToBlocks } from "../src/textFormat.ts";
+import { loadTs } from "./helpers/loadTs.mjs";
+const { blocksToText, textToBlocks } = await loadTs("../src/textFormat.ts");
 
 // Property: text -> blocks -> text returns every line unchanged (apart from the BlockNote phantom trailing paragraph).
 const samples = {

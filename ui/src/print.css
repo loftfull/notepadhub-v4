@@ -1,0 +1,106 @@
+/* Печать заметки: Ctrl+P (shortcuts.ts → window.print(), WebView2 показывает системный диалог печати).
+   На бумагу уходит только лист активной заметки: обвязка интерфейса скрывается, тёмная тема печатается
+   чёрным по белому, экранный масштаб текста сбрасывается, тени и рамки листа убираются.
+   Раньше печати в приложении не было вовсе (замечание F3 в docs/CRITIC_REPORT.md). */
+
+@media print {
+  @page {
+    margin: 18mm 16mm;
+  }
+
+  /* всё, что не является текстом заметки */
+  .topbar,
+  .sidebar,
+  .statusbar,
+  .document-tabs,
+  .tab-actions,
+  .split-bar,
+  .find-bar,
+  .links-panel,
+  .inspector-panel,
+  .note-properties-panel,
+  .ai-assistant,
+  .ai-resizer,
+  .selection-ai-toolbar,
+  .toast,
+  .modal-backdrop,
+  .search-scrim,
+  .second-column {
+    display: none !important;
+  }
+
+  /* лист без экранной рамки и прокрутки: текст течёт на страницы целиком */
+  html, body {
+    background: #fff !important;
+  }
+
+  .app-shell,
+  .app-shell.theme-dark,
+  .workspace,
+  .main-panel,
+  .editor-scroll,
+  .editor-column {
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+    gap: 0 !important;
+  }
+
+  .editor-card {
+    box-shadow: none !important;
+    border: none !important;
+    outline: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+    width: auto !important;
+    min-height: 0 !important;
+    aspect-ratio: auto !important;
+    background: #fff !important;
+  }
+
+  /* экранный масштаб (Ctrl +/−) — свойство экрана; на бумаге всегда 100 % */
+  .editor-card .bn-editor {
+    zoom: 1 !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  /* тёмная тема и подсветки не должны печатать белый текст по белому */
+  .bn-editor,
+  .bn-editor * {
+    color: #000 !important;
+    background-color: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* ссылки теряют экранную подсветку [[ссылок]] — на бумаге это обычный текст */
+  .bn-editor .wikilink,
+  .bn-editor .wikilink-missing {
+    background: transparent !important;
+    text-decoration: none !important;
+  }
+
+  /* картинки не выходят за поля */
+  .bn-editor img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* заголовки и абзацы не отрываются от текста на границе страниц */
+  .bn-editor h1, .bn-editor h2, .bn-editor h3 {
+    break-after: avoid-page;
+  }
+
+  .bn-editor p, .bn-editor li, .bn-editor blockquote {
+    break-inside: avoid;
+  }
+}

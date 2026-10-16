@@ -87,15 +87,36 @@ export function renameLinkInText(text: string, oldTitle: string, newTitle: strin
 }
 
 type InlineLike = { type?: string; text?: string; content?: unknown };
+type TableLike = { type?: string; rows?: Array<{ cells?: unknown[] }> };
+
 /**
- * Rewrites links to a renamed note inside BlockNote blocks (text runs, link labels, nested children).
+ * Rewrites links to a renamed note inside BlockNote blocks (text runs, link labels, table cells, nested children).
  * Returns the same array when nothing changed. A link split over several styled runs is left alone on purpose.
  */
 export function renameLinkInBlocks<B extends { content?: unknown; children?: unknown }>(blocks: B[], oldTitle: string, newTitle: string): { blocks: B[]; count: number } {
   let count = 0;
   const inline = (content: unknown): unknown => {
     if (typeof content === "string") { const r = renameLinkInText(content, oldTitle, newTitle); count += r.count; return r.text; }
-    if (!Array.isArray(content)) return content;
+    if (!Array.isArray(content)) {
+      // a BlockNote table keeps its text in rows[].cells[] (each cell is its own inline content):
+      // without this branch links inside cells survive a rename and break (QA2-L3)
+      const table = content as TableLike | null;
+      if (table && table.type === "tableContent" && Array.isArray(table.rows)) {
+        return {
+          ...table,
+          rows: table.rows.map((row) => ({
+            ...row,
+            cells: (Array.isArray(row.cells) ? row.cells : []).map((cell) =>
+              Array.isArray(cell)
+                ? inline(cell)
+                : cell && typeof cell === "object" && "content" in (cell as Record<string, unknown>)
+                  ? { ...(cell as object), content: inline((cell as { content?: unknown }).content) }
+                  : cell),
+          })),
+        };
+      }
+      return content;
+    }
     return content.map((item: InlineLike) => {
       if (item && item.type === "text" && typeof item.text === "string") { const r = renameLinkInText(item.text, oldTitle, newTitle); count += r.count; return r.count ? { ...item, text: r.text } : item; }
       if (item && item.type === "link" && Array.isArray(item.content)) return { ...item, content: inline(item.content) };

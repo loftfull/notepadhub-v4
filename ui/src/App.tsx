@@ -34,6 +34,7 @@ import type { DocItem, LabState } from "./labState";
 import { host, isHosted, onHostEvent, type HistoryEntry } from "./bridge";
 import { EDITOR_LIMIT_CHARS, toLabState, type HostSync, type LoadedHost } from "./hostAdapter";
 import { blocksToText, textToBlocks, type LooseBlock } from "./textFormat";
+import { decodeTextBytes, looksBinary } from "./decodeText";
 
 const AI_EDIT_MAX_OUTPUT_TOKENS = 512;
 const AI_ANALYSIS_MAX_OUTPUT_TOKENS = 1536;
@@ -736,7 +737,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   }), [sync, folder, folders, parents, dark, tags]);
 
   const createNote = useCallback((title: string, heading: string = title) => {
-    const id = `note-${Date.now()}`;
+    // a time-only id collides when two notes are created within the same millisecond: the random suffix makes it unique
+    const id = `note-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const next: DocItem = { id, title, folder, updated: "только что", icon: "note", lastOpenedAt: Date.now(), modifiedAt: Date.now() };
     const initial = [
       { type: "heading" as const, props: { level: 1 as const }, content: heading },
@@ -1900,7 +1902,14 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
       return;
     }
     try {
-      const text = await file.text();
+      // not file.text(): that reads UTF-8 only and turns a Windows-1251 .txt into mojibake;
+      // the rules here mirror the host's NoteStore.DecodeText (BOM → UTF-16, strict UTF-8, cp1251 fallback)
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (looksBinary(bytes)) {
+        setNotice(`Файл «${file.name}» содержит двоичные данные и не открывается как текст`);
+        return;
+      }
+      const text = decodeTextBytes(bytes);
       if (text.length > EDITOR_LIMIT_CHARS) {
         setNotice(`Файл «${file.name}» длиннее ${EDITOR_LIMIT_CHARS.toLocaleString("ru")} знаков: редактор его не примет. Откройте его кнопкой «Открыть файлы…» — большие файлы остаются ссылкой.`);
         return;
@@ -2212,6 +2221,11 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         case "zoomOut": setZoom((z) => Math.max(70, z - 10)); break;
         case "zoomReset": setZoom(100); break;
         case "nextTab": case "prevTab": stepTabRef.current(action === "nextTab" ? 1 : -1); break;
+        case "print":
+          // in a Release build WebView2 does not pass browser keys to the page, so printing lives in the app itself:
+          // window.print() opens the system print dialog, print.css leaves only the note sheet on paper
+          if (activeIdRef.current) window.print(); else setNotice("Откройте заметку для печати");
+          break;
         case "help": setShowShortcuts(true); break;
       }
     };

@@ -77,6 +77,11 @@ public sealed class AiService
     private const string OpenRouterChatUrl = "https://openrouter.ai/api/v1/chat/completions";
 
     private readonly HttpClient _http;
+    private readonly HttpClient? _remoteHttp;
+    /// <summary>Calls that leave the computer (OpenRouter, a non-local OpenAI-compatible service) go through the guarded
+    /// client when the host provided one: it pins every connection to public addresses (DNS-rebinding protection) and
+    /// carries no proxy or cookies. Loopback calls (Ollama, LM Studio on this computer) keep the plain injected client.</summary>
+    private HttpClient Remote => _remoteHttp ?? _http;
     private readonly IAiSecretStore _secrets;
     private readonly Action<string> _log;
     private Uri _ollama;
@@ -91,11 +96,11 @@ public sealed class AiService
     private (DateTime Expires, List<OpenRouterModel> Models)? _modelCache;
     private int _localBusy;
 
-    public AiService(HttpClient http, IAiSecretStore secrets, Action<string>? log = null, Uri? ollamaBase = null, IAiUsageStore? usage = null, double? monthlyBudgetUsd = null, Func<CloudSendInfo, Task<bool>>? confirmCloud = null, CompatServiceStore? compat = null)
+    public AiService(HttpClient http, IAiSecretStore secrets, Action<string>? log = null, Uri? ollamaBase = null, IAiUsageStore? usage = null, double? monthlyBudgetUsd = null, Func<CloudSendInfo, Task<bool>>? confirmCloud = null, CompatServiceStore? compat = null, HttpClient? remoteHttp = null)
     {
         _confirmCloud = confirmCloud;
         _compat = compat;
-        _http = http; _secrets = secrets; _log = log ?? (_ => { });
+        _http = http; _remoteHttp = remoteHttp; _secrets = secrets; _log = log ?? (_ => { });
         _usage = usage ?? new MemoryAiUsageStore();
         var envBudget = Environment.GetEnvironmentVariable("NOTEPADHUB_AI_MONTHLY_USD");
         _monthlyBudgetUsd = monthlyBudgetUsd ?? (double.TryParse(envBudget, NumberStyles.Float, CultureInfo.InvariantCulture, out var b) && b >= 0 ? b : 5.0);
@@ -145,12 +150,13 @@ public sealed class AiService
     private async Task<List<string>> CompatModelsAsync(CancellationToken ct)
     {
         var cfg = _compat?.Load() ?? throw new AiHttpException(503, "Сервис не настроен: укажите адрес и ключ.");
+        var http = cfg.Local ? _http : Remote;   // the key rides along even for a model list: a non-local address only through the guarded client
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct); cts.CancelAfter(10_000);
         using var req = new HttpRequestMessage(HttpMethod.Get, cfg.BaseUrl.AbsoluteUri.TrimEnd('/') + "/models");
         if (_compat!.GetKey() is { Length: > 0 } key) req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
         try
         {
-            using var resp = await _http.SendAsync(req, cts.Token);
+            using var resp = await http.SendAsync(req, cts.Token);
             if (!resp.IsSuccessStatusCode) throw new AiHttpException(502, $"Сервис не отдал список моделей (HTTP {(int)resp.StatusCode}). Введите название модели вручную.");
             return CompatServiceStore.ParseModelIds(await resp.Content.ReadAsStringAsync(cts.Token));
         }
@@ -223,7 +229,7 @@ public sealed class AiService
         if (_modelCache is { } c && c.Expires > DateTime.UtcNow) return c.Models;
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct); cts.CancelAfter(8000);
         HttpResponseMessage resp;
-        try { resp = await _http.GetAsync(OpenRouterModelsUrl, cts.Token); }
+        try { resp = await Remote.GetAsync(OpenRouterModelsUrl, cts.Token); }
         catch (Exception) when (!ct.IsCancellationRequested) { throw new AiHttpException(502, "Каталог OpenRouter недоступен."); }
         using (resp)
         {
@@ -354,7 +360,7 @@ public sealed class AiService
             options = AiLimits.OllamaOptions(temperature, AiLimits.NumCtx(system.Length + user.Length, maxOut), maxOut),
             messages = new object[] { new { role = "system", content = system }, new { role = "user", content = user } },
         });
-        return await SendWithRetryAsync(() => new HttpRequestMessage(HttpMethod.Post, new Uri(_ollama, "/api/chat")) { Content = new StringContent(body, Encoding.UTF8, "application/json") }, ct);
+        return await SendWithRetryAsync(_http, () => new HttpRequestMessage(HttpMethod.Post, new Uri(_ollama, "/api/chat")) { Content = new StringContent(body, Encoding.UTF8, "application/json") }, ct);   // Ollama is always this computer
     }
 
     /// <summary>
@@ -405,7 +411,7 @@ public sealed class AiService
             var body = JsonSerializer.Serialize(new { model, prompt, n = 1, size = $"{width}x{height}", response_format = "b64_json" });
             using var req = new HttpRequestMessage(HttpMethod.Post, cfg.BaseUrl.AbsoluteUri.TrimEnd('/') + "/images/generations") { Content = new StringContent(body, Encoding.UTF8, "application/json") };
             if (!string.IsNullOrWhiteSpace(key)) req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
-            using var resp = await _http.SendAsync(req, ct);
+            using var resp = await (cfg.Local ? _http : Remote).SendAsync(req, ct);
             if (!resp.IsSuccessStatusCode) throw new AiHttpException(502, $"Сервис не создал картинку (HTTP {(int)resp.StatusCode}). Проверьте, что у него есть создание изображений и название модели верное.");
             var (bytes, url) = ParseImageAnswer(await resp.Content.ReadAsStringAsync(ct));
             if (bytes is not null) return bytes;
@@ -441,6 +447,7 @@ public sealed class AiService
                 if (!approved) throw new AiHttpException(403, "Отправка во внешний сервис отменена: запрос не подтверждён.");
                 lock (_rateLock) _approvedFree.Add(tag);
             }
+            ct.ThrowIfCancellationRequested();   // cancelled while the confirmation was open: the quota and budget must stay untouched (QA2 Q2_07)
             counted = CommitCloudCall();
         }
         // Reasoning models (gpt-oss, deepseek, kimi, glm...) spend part of max_tokens on thinking: with a tight limit the answer comes back empty.
@@ -453,9 +460,10 @@ public sealed class AiService
         };
         if (model.Contains("gpt-oss", StringComparison.OrdinalIgnoreCase)) payload["reasoning_effort"] = "low";
         var body = JsonSerializer.Serialize(payload);
+        var http = cfg.Local ? _http : Remote;   // a non-local service is only reached through the public-address guard
         try
         {
-            return await SendWithRetryAsync(() =>
+            return await SendWithRetryAsync(http, () =>
             {
                 var req = new HttpRequestMessage(HttpMethod.Post, endpoint) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
                 if (!string.IsNullOrWhiteSpace(key)) req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
@@ -489,6 +497,7 @@ public sealed class AiService
             if (!approved) throw new AiHttpException(403, "Отправка в облако отменена: запрос не подтверждён.");
             if (estimate == 0) lock (_rateLock) _approvedFree.Add(model);
         }
+        ct.ThrowIfCancellationRequested();   // cancelled while the confirmation was open: the quota and budget must stay untouched (QA2 Q2_07)
         var counted = CommitCloudCall();
         ReserveSpend(estimate);
         var body = JsonSerializer.Serialize(new
@@ -498,7 +507,7 @@ public sealed class AiService
         });
         try
         {
-        return await SendWithRetryAsync(() =>
+        return await SendWithRetryAsync(Remote, () =>
         {
             var req = new HttpRequestMessage(HttpMethod.Post, OpenRouterChatUrl) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
@@ -583,14 +592,14 @@ public sealed class AiService
     }
 
     /// <summary>One automatic retry, only for transient failures before the first byte. 4xx are never retried.</summary>
-    private async Task<HttpResponseMessage> SendWithRetryAsync(Func<HttpRequestMessage> make, CancellationToken ct)
+    private static async Task<HttpResponseMessage> SendWithRetryAsync(HttpClient http, Func<HttpRequestMessage> make, CancellationToken ct)
     {
         for (var attempt = 0; ; attempt++)
         {
             HttpResponseMessage? resp = null;
             try
             {
-                resp = await _http.SendAsync(make(), HttpCompletionOption.ResponseHeadersRead, ct);
+                resp = await http.SendAsync(make(), HttpCompletionOption.ResponseHeadersRead, ct);
                 if (resp.IsSuccessStatusCode) return resp;
                 var status = (int)resp.StatusCode;
                 var retryAfter = resp.Headers.RetryAfter?.Delta;
