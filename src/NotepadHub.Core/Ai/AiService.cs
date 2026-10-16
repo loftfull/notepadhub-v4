@@ -629,10 +629,12 @@ public sealed class AiService
             emit(new { model, delta = text });
         }
         var sse = new StringBuilder();
+        var seen = new StringBuilder();   // the first lines of the stream, kept to explain an empty answer
         string? line;
         while ((line = await reader.ReadLineAsync(ct)) != null)
         {
             progress?.Invoke();
+            if (seen.Length < 400) seen.Append(line.Length > 160 ? line[..160] : line).Append(' ');
             if (!openRouter)
             {
                 if (line.Length == 0) continue;
@@ -656,7 +658,7 @@ public sealed class AiService
             if (r.TryGetProperty("choices", out var ch2) && ch2.ValueKind == JsonValueKind.Array && ch2.GetArrayLength() > 0
                 && ch2[0].TryGetProperty("finish_reason", out var fr) && fr.ValueKind == JsonValueKind.String && fr.GetString() == "length") truncated = true;
         }
-        if (outputChars == 0) throw new InvalidDataException("AI-провайдер завершил поток без текста.");
+        if (outputChars == 0) throw new InvalidDataException("AI-провайдер завершил поток без текста." + (seen.Length > 0 ? " Начало ответа: " + seen.ToString().Trim()[..Math.Min(seen.ToString().Trim().Length, 300)] : ""));
         if (truncated) emit(new { model, truncated = true });   // the model hit its output limit: the answer ends in the middle
         emit(new { model, done = true });
     }

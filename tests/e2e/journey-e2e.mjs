@@ -65,7 +65,7 @@ try {
   await shot("04-delete-question.png");
   await page.locator(".confirm-modal .form-submit").click();
   await sleep(800);
-  await page.locator(".folder-row", { hasText: "Корзина" }).click();
+  await page.locator(".section-tile", { hasText: "Корзина" }).click();
   await page.locator(".trash-list li", { hasText: TITLE }).waitFor({ timeout: 8000 });
   await shot("05-in-trash.png");
   check("4 delete: the note asks first and lands in the trash list", (await page.locator(".trash-list li", { hasText: TITLE }).count()) === 1);

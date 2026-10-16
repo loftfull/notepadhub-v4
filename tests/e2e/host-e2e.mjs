@@ -97,8 +97,8 @@ try {
   // 2. library loads from disk
   await page.waitForSelector(".tab, .tabs-empty", { timeout: 20000 });
   await page.locator(".tab").first().click().catch(() => {});   // the app opens on the home page; leave it for the editor checks
-  const folderRows = await page.locator(".folder-row").count();
-  check("host shows the library (folders rendered)", folderRows >= 3, `folders/rows=${folderRows}`);
+  const folderRows = (await page.locator(".folder-row").count()) + (await page.locator(".section-tile").count());
+  check("host shows the library (folders rendered)", folderRows >= 5, `folders/rows=${folderRows}`);
   check("page runs inside the host (not the browser mock)", await page.evaluate(() => Boolean(window.chrome?.webview)));
   check("content security policy is present", (await page.locator('meta[http-equiv="Content-Security-Policy"]').count()) === 1);
 
@@ -367,7 +367,7 @@ try {
   await menu("В корзину");
   await confirmModal("В корзину");
   await waitDisk(() => readMeta(id1).IsDeleted === true);
-  await page.locator(".folder-row", { hasText: "Корзина" }).click();
+  await page.locator(".section-tile", { hasText: "Корзина" }).click();
   await sleep(700);
   await page.locator(".tab", { hasText: n.Title.slice(0, 8) }).first().click().catch(() => {});
   await menu("Удалить навсегда");

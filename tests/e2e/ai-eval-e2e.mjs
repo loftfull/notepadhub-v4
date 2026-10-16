@@ -15,6 +15,8 @@ const [exe, zip, corpusDir, outFile] = process.argv.slice(2);
 // EVAL_MODEL: the model id to pick in the panel (optional; the first of the ranked list is used otherwise)
 const MODE = process.env.EVAL_MODE ?? "local";
 const MODEL = process.env.EVAL_MODEL ?? "";
+// the app allows 10 cloud requests per minute (a protection): the run keeps a pause between tasks for cloud models
+const PACE_MS = Number(process.env.EVAL_PACE_MS ?? (MODE === "local" ? 0 : 7000));
 const ONLY = process.env.EVAL_ONLY ? process.env.EVAL_ONLY.split(",").map(Number) : null;   // e.g. "1,3,14": run only these task numbers
 const PORT = 9371;
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "nh4-e2e-"));
@@ -103,6 +105,7 @@ try {
   const modelInfo = { name: "" };
   for (const [id, letter, kind, label, flag] of TASKS) {
     if (ONLY && !ONLY.includes(id)) continue;
+    if (PACE_MS && results.length) await sleep(PACE_MS);
     const rec = { id, letter, kind, label: kind === "custom" ? label.slice(0, 60) : label, typo: flag === "typo" };
     const t0 = Date.now();
     try {

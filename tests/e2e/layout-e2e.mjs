@@ -33,6 +33,13 @@ try {
   for (let i = 0; i < 120 && !page; i++) { for (const c of browser.contexts()) for (const p of c.pages()) if (p.url().startsWith("https://app.notepadhub.local")) page = p; if (!page) await sleep(250); }
   await page.waitForSelector(".topbar", { timeout: 40000 });
 
+  // ---- the library: projects on top, notes below, one block of sections, settings at the bottom
+  const lib = await page.evaluate(() => { const q = (sel) => document.querySelector(sel)?.getBoundingClientRect(); const top = (sel) => Math.round(q(sel)?.top ?? -1); return { caption: document.querySelector(".sidebar-caption")?.textContent?.trim(), hasNewButton: !!document.querySelector(".new-note-button"), oldCaption: /БИБЛИОТЕКА/i.test(document.querySelector(".sidebar")?.innerText ?? ""), projects: top(".projects-section"), notes: top(".notes-section"), sections: top(".sections-grid"), settings: top(".sidebar > .settings-menu"), tiles: [...document.querySelectorAll(".section-tile span")].map((e) => e.textContent.trim()), notesScrollbar: getComputedStyle(document.querySelector(".notes-list")).scrollbarWidth, topbarSettings: !!document.querySelector(".topbar summary[aria-label='Настройки приложения']") }; });
+  check("projects come first, the notes under them, then the block of sections, then the settings", lib.caption === "Проекты" && lib.projects < lib.notes && lib.notes < lib.sections && lib.sections < lib.settings, JSON.stringify(lib));
+  check("no 'БИБЛИОТЕКА ЗАМЕТОК' caption, no 'Новая заметка' button in the library", !lib.oldCaption && !lib.hasNewButton);
+  check("favourites, recent, archive and trash are one block", JSON.stringify(lib.tiles) === JSON.stringify(["Избранное", "Недавние", "Архив", "Корзина"]));
+  check("the notes list has no scrollbar line, the settings are in the library and not in the top bar", lib.notesScrollbar === "none" && !lib.topbarSettings);
+
   // ---- the collapse button is one; the collapsed library is an icon column
   const toggles = async () => page.locator("button[aria-label$='библиотеку']").count();
   check("there is exactly one collapse/expand button for the library", (await toggles()) === 1);
@@ -49,12 +56,12 @@ try {
   await page.getByRole("button", { name: "Открыть AI-помощник" }).click();
   await sleep(600);
   const aiRail = await page.evaluate(() => { const s = document.querySelector(".sidebar"); const r = document.querySelector(".rail"); const rb = r?.getBoundingClientRect(); return { width: Math.round(s.getBoundingClientRect().width), railWidth: Math.round(rb?.width ?? 0), buttons: r?.querySelectorAll("button").length ?? 0 }; });
-  check("opening the AI panel turns the library into a visible icon column", aiRail.width >= 44 && aiRail.railWidth > 30 && aiRail.buttons === 5 && (await toggles()) === 1, JSON.stringify(aiRail));
+  check("opening the AI panel turns the library into a visible icon column", aiRail.width >= 44 && aiRail.railWidth > 30 && aiRail.buttons === 4 && (await toggles()) === 1, JSON.stringify(aiRail));
   await page.getByRole("button", { name: "Закрыть AI-помощник" }).first().click();
   await sleep(500);
 
   // ---- new note: no name yet
-  await page.locator(".new-note-button").click();
+  await page.getByRole("button", { name: "Быстро создать заметку" }).click();
   await sleep(700);
   const tabText = await page.locator(".tab-wrap.is-active .tab").innerText();
   const crumb = await page.locator(".crumb-title").innerText();
@@ -66,10 +73,10 @@ try {
   await noteMenu("Закрепить");
   await sleep(500);
   check("a pinned note shows a star on its tab", (await page.locator(".tab-wrap .tab-pin").count()) >= 1);
-  await page.locator(".folder-row", { hasText: "Избранное" }).click();
+  await page.locator(".section-tile", { hasText: "Избранное" }).click();
   await sleep(500);
   check("the library has 'Избранное' and it lists the pinned note", (await page.locator(".notes-list button", { hasText: "Избранная" }).count()) === 1);
-  await page.locator(".folder-row", { hasText: "Недавние" }).click();
+  await page.locator(".section-tile", { hasText: "Недавние" }).click();
   await sleep(400);
   check("the library has 'Недавние' and the opened note is there", (await page.locator(".notes-list button", { hasText: "Избранная" }).count()) === 1);
   await page.locator("button[aria-label='Свернуть библиотеку']").click();
@@ -88,7 +95,7 @@ try {
   check("the delete question says the note can be restored within 30 days", (await page.locator(".confirm-modal").innerText()).includes("30 дней"));
   await page.locator(".confirm-modal .form-submit").click();
   await sleep(600);
-  await page.locator(".folder-row", { hasText: "Корзина" }).click();
+  await page.locator(".section-tile", { hasText: "Корзина" }).click();
   await page.locator(".trash-view").waitFor({ timeout: 8000 });
   const row = page.locator(".trash-list li", { hasText: "Лишняя" });
   check("the trash is a list in the main area with date, days left and row buttons", (await row.count()) === 1 && /удалена/.test(await row.innerText()) && /осталось \d+ дн/.test(await row.innerText()) && (await row.getByRole("button", { name: /Восстановить/ }).count()) === 1);
@@ -169,7 +176,7 @@ try {
   await page.locator(".folder-row", { hasText: "Входящие" }).click();
   const base = (await autoTitles()).length;
   const seq = (n) => JSON.stringify(Array.from({ length: n }, (_, i) => `Заметка ${i + 1}`));
-  for (let i = 0; i < 3; i++) { await page.locator(".new-note-button").click(); await sleep(500); }
+  for (let i = 0; i < 3; i++) { await page.getByRole("button", { name: "Быстро создать заметку" }).click(); await sleep(500); }
   await page.locator(".folder-row", { hasText: "Входящие" }).click();
   await sleep(400);
   check("three new notes continue the numbering without gaps", JSON.stringify((await autoTitles()).sort()) === seq(base + 3), JSON.stringify(await autoTitles()));
@@ -187,7 +194,7 @@ try {
   check("after a rename the numbers close up again", JSON.stringify((await autoTitles()).sort()) === seq(base + 1), JSON.stringify(await autoTitles()));
 
   // ---- an empty note counts nothing; two long notes side by side never push the window past the screen
-  await page.locator(".new-note-button").click();
+  await page.getByRole("button", { name: "Быстро создать заметку" }).click();
   await sleep(600);
   check("an empty note says '0 слов · 0 знаков'", /0 слов/.test(await page.locator(".statusbar").innerText()) && /0 знаков/.test(await page.locator(".statusbar").innerText()), (await page.locator(".statusbar").innerText()).replace(/\s+/g, " ").slice(0, 100));
   await page.locator(".folder-row", { hasText: "Импорт Windows" }).click();

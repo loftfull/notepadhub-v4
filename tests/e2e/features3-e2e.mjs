@@ -46,7 +46,7 @@ try {
   await page.waitForSelector(".topbar", { timeout: 40000 });
 
   // ---- the free online service is the default
-  await page.locator(".new-note-button").click();
+  await page.getByRole("button", { name: "Быстро создать заметку" }).click();
   await page.waitForSelector(".bn-editor", { state: "visible", timeout: 10000 });
   await page.getByRole("button", { name: "Открыть AI-помощник" }).click();
   await page.waitForFunction(() => document.querySelector(".ais-model-text")?.textContent?.includes("Pollinations"), null, { timeout: 20000 }).catch(() => {});
@@ -87,7 +87,7 @@ try {
   await page.locator(".confirm-modal .form-submit").click();
   check("after the answer the note is in the trash on disk", await waitDisk(() => metaOf("Альфа")?.IsDeleted === true));
   check("another note is opened instead of the trashed one", !(await page.locator(".crumb-title").innerText()).includes("Альфа"));
-  check("the trash counter in the library shows it", (await page.locator(".folder-row", { hasText: "Корзина" }).locator(".folder-count").innerText()).trim() === "1");
+  check("the trash counter in the library shows it", (await page.locator(".section-tile", { hasText: "Корзина" }).locator("b").innerText()).trim() === "1");
   await page.locator(".toast .toast-action").click();
   check("'Отменить' in the message brings the note back", await waitDisk(() => metaOf("Альфа")?.IsDeleted === false));
   await openTab("Бета");

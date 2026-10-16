@@ -1,6 +1,6 @@
 # Журнал сквозного сценария
 
-Хэш кода: eee10f9f0d6931c2
+Хэш кода: d9a2dd6c9714d789
 Команда: node tests/e2e/journey-e2e.mjs src/NotepadHub.Host/bin/Debug/net8.0-windows/NotepadHub4.exe <копия профиля data-v3.zip> docs/evidence
 Код выхода: 0
 Дата: 2026-10-16

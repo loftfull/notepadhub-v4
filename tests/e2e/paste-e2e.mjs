@@ -43,7 +43,7 @@ try {
   let page;
   for (let i = 0; i < 120 && !page; i++) { for (const c of browser.contexts()) for (const p of c.pages()) if (p.url().startsWith("https://app.notepadhub.local")) page = p; if (!page) await sleep(250); }
   await page.waitForSelector(".topbar", { timeout: 30000 });
-  await page.locator(".new-note-button").click();
+  await page.getByRole("button", { name: "Быстро создать заметку" }).click();
   await page.waitForSelector(".bn-editor", { state: "visible", timeout: 10000 });
   const before = fs.existsSync(assetsDir) ? fs.readdirSync(assetsDir).length : 0;
   await page.evaluate(() => { window.__notices = []; window.addEventListener("nh4-notice", (e) => window.__notices.push(e.detail)); });

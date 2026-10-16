@@ -1325,6 +1325,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     const total = Object.entries(report).reduce((sum, [key, value]) => sum + (key === "letterParts" || key === "technical" ? 0 : value), 0);
     if (total === 0) { setNotice(prefix + describeReport(report)); return false; }
     editor.replaceBlocks(editor.document, blocks as unknown as PartialBlock[]);
+    editor.focus();   // so Ctrl+Z right after the layout undoes it in one step
     window.setTimeout(saveDocument, 0);
     setNotice(prefix + describeReport(report) + " · отменить: Ctrl+Z");
     return true;
@@ -1410,6 +1411,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
           // the model lays out the structure, the fixed rules finish it: no empty lines, typography, pictures, letter parts
           const polished = autoFormat(blocks as unknown as AfBlock[]).blocks as unknown as PartialBlock[];
           editor.replaceBlocks(editor.document, polished.length > 0 ? polished : blocks);
+          editor.focus();
           window.setTimeout(saveDocument, 0);
           setNotice(`Оформлено ИИ (${aiProvider === "compat" ? aiProviders?.compat?.name ?? "сервис" : aiModel}) · слова сохранены · отменить: Ctrl+Z`);
           return;
@@ -2173,8 +2175,45 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
                 {canUndoAi && <button onClick={undoAcceptedAi}><RotateCcw size={14} />Отменить AI-изменение</button>}
               </div>
             </details>
+        </div>
+      </header>
+
+      <div className={`workspace${navigationCollapsed ? " nav-collapsed" : ""}${trashPane ? " trash-open" : ""}`}>
+        <aside className="sidebar" id="note-navigation" aria-label="Навигация по заметкам">
+          <div className="sidebar-toolbar"><h2 className="sidebar-caption" id="projects-heading">Проекты</h2><button className="icon-button tiny sidebar-add" aria-label="Добавить проект" title="Добавить проект" onClick={addFolder}><Plus size={16} /></button><button ref={mobileNavTriggerRef} className="icon-button tiny desktop-nav-close" aria-expanded={!navigationCollapsed} aria-controls="note-navigation" aria-label={navigationCollapsed ? "Развернуть библиотеку" : "Свернуть библиотеку"} title={navigationCollapsed ? (aiSideBySideNav ? "Развернуть библиотеку (помощник закроется)" : "Развернуть библиотеку") : "Свернуть библиотеку"} onClick={() => { if (!navigationCollapsed) { setSidebarCollapsed(true); return; } if (aiSideBySideNav) setActiveInspector(null); setSidebarCollapsed(false); }}>{navigationCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button></div>
+          <div className="sidebar-body">
+          <section className="nav-section projects-section" aria-labelledby="projects-heading">
+            {folders.map((name) => <button key={name} className={`folder-row${noteView === "folder" && folder === name ? " selected" : ""}`} aria-current={noteView === "folder" && folder === name ? "page" : undefined} onClick={() => handleFolderSelect(name)}><Folder size={16} className="folder-icon" /><span>{name === "Архив" ? "Архив · проект" : name}</span><span className="folder-count">{docs.filter((doc) => doc.folder === name && !doc.deletedAt && !doc.archived).length}</span></button>)}
+          </section>
+          <section className="nav-section notes-section" aria-label="Заметки раздела">
+            <div className="section-label"><h2>{noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : "Заметки"}</h2><span className="notes-count">{filteredDocs.length}</span></div>
+            <ul className="notes-list">
+              {filteredDocs.map((doc) => <li key={doc.id}><button className={doc.id === activeId ? "is-current" : undefined} aria-current={doc.id === activeId ? "true" : undefined} title={doc.title} onClick={() => selectDocument(doc)}><FileText size={14} aria-hidden="true" /><span>{doc.title}</span></button></li>)}
+              {filteredDocs.length === 0 && <li className="notes-empty">В этом разделе нет заметок</li>}
+            </ul>
+          </section>
+          {allTags.length > 0 && <details className="nav-section tags-section" open={tagsOpen || tagFilter !== null} onToggle={(event) => { const open = (event.currentTarget as HTMLDetailsElement).open; setTagsOpen(open); try { window.localStorage.setItem("nh4-tags-open", open ? "1" : "0"); } catch { /* optional */ } }}>
+            <summary className="tags-summary"><Hash size={14} aria-hidden="true" /><span>Метки</span><span className="notes-count">{allTags.length}{tagFilter ? ` · ${tagFilter}` : ""}</span><ChevronDown size={14} className="tags-chevron" aria-hidden="true" /></summary>
+            <div className="tag-cloud">
+              {allTags.map(([tag, count]) => <button key={tag} className={`tag-chip${tagFilter === tag ? " is-on" : ""}`} aria-pressed={tagFilter === tag} title={tagFilter === tag ? "Показать все заметки" : `Только заметки с меткой «${tag}»`} onClick={() => setTagFilter((current) => current === tag ? null : tag)}><Hash size={12} />{tag}<span>{count}</span></button>)}
+            </div>
+          </details>}
+          <div className="sidebar-spacer" />
+          <section className="nav-section sections-grid" aria-label="Разделы">
+            <button className={`section-tile${noteView === "pinned" ? " selected" : ""}`} aria-current={noteView === "pinned" ? "page" : undefined} onClick={() => switchToSpecialView("pinned")}><Star size={15} aria-hidden="true" /><span>Избранное</span>{pinnedDocs.length > 0 && <b>{pinnedDocs.length}</b>}</button>
+            <button className={`section-tile${noteView === "recent" ? " selected" : ""}`} aria-current={noteView === "recent" ? "page" : undefined} onClick={() => switchToSpecialView("recent")}><Clock3 size={15} aria-hidden="true" /><span>Недавние</span></button>
+            <button className={`section-tile${noteView === "archive" ? " selected" : ""}`} aria-current={noteView === "archive" ? "page" : undefined} onClick={() => switchToSpecialView("archive")}><Archive size={15} aria-hidden="true" /><span>Архив</span>{docs.some((doc) => doc.archived && !doc.deletedAt) && <b>{docs.filter((doc) => doc.archived && !doc.deletedAt).length}</b>}</button>
+            <button className={`section-tile${noteView === "trash" ? " selected" : ""}`} aria-current={noteView === "trash" ? "page" : undefined} onClick={() => switchToSpecialView("trash")}><Trash2 size={15} aria-hidden="true" /><span>Корзина</span>{trashCount > 0 && <b>{trashCount}</b>}</button>
+          </section>
+          </div>
+          <nav className="rail" aria-label="Быстрые разделы">
+            <button type="button" className={`rail-button${railMenu === "pinned" ? " is-on" : ""}`} aria-label="Избранное" title="Избранное" aria-expanded={railMenu === "pinned"} onClick={() => setRailMenu((current) => current === "pinned" ? null : "pinned")}><Star size={17} /></button>
+            <button type="button" className={`rail-button${railMenu === "recent" ? " is-on" : ""}`} aria-label="Недавние" title="Недавние" aria-expanded={railMenu === "recent"} onClick={() => setRailMenu((current) => current === "recent" ? null : "recent")}><Clock3 size={17} /></button>
+            <button type="button" className={`rail-button${noteView === "archive" ? " is-on" : ""}`} aria-label="Архив" title="Архив" onClick={() => switchToSpecialView("archive")}><Archive size={17} /></button>
+            <button type="button" className={`rail-button${noteView === "trash" ? " is-on" : ""}`} aria-label="Корзина" title="Корзина" onClick={() => switchToSpecialView("trash")}><Trash2 size={17} />{trashCount > 0 && <span className="rail-badge">{trashCount}</span>}</button>
+          </nav>
           <details className="note-toolbar-overflow library-menu settings-menu">
-            <summary aria-label="Настройки приложения" title="Настройки приложения"><Settings size={16} /><span>Настройки</span><ChevronDown size={14} /></summary>
+            <summary aria-label="Настройки приложения" title="Настройки приложения"><Settings size={16} /><span>Настройки</span></summary>
             <div className="note-toolbar-menu" onClick={noteMenuClose}>
               <div className="note-toolbar-menu-label">Файлы и данные</div>
               <button onClick={() => (isHosted() ? void handleHostFileOpen() : textInputRef.current?.click())}><FolderOpen size={14} />Открыть файлы…</button>
@@ -2190,49 +2229,6 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
               <button onClick={() => setShowShortcuts(true)}><Command size={14} />Сочетания клавиш</button>
             </div>
           </details>
-        </div>
-      </header>
-
-      <div className={`workspace${navigationCollapsed ? " nav-collapsed" : ""}${trashPane ? " trash-open" : ""}`}>
-        <aside className="sidebar" id="note-navigation" aria-label="Навигация по заметкам">
-          <div className="sidebar-toolbar"><span className="sidebar-caption">БИБЛИОТЕКА ЗАМЕТОК</span><button ref={mobileNavTriggerRef} className="icon-button tiny desktop-nav-close" aria-expanded={!navigationCollapsed} aria-controls="note-navigation" aria-label={navigationCollapsed ? "Развернуть библиотеку" : "Свернуть библиотеку"} title={navigationCollapsed ? (aiSideBySideNav ? "Развернуть библиотеку (помощник закроется)" : "Развернуть библиотеку") : "Свернуть библиотеку"} onClick={() => { if (!navigationCollapsed) { setSidebarCollapsed(true); return; } if (aiSideBySideNav) setActiveInspector(null); setSidebarCollapsed(false); }}>{navigationCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button></div>
-          <div className="sidebar-body">
-          <button className="new-note-button" onClick={addDocument}><Plus size={16} />Новая заметка</button>
-          <section className="nav-section quick-section" aria-label="Быстрый доступ">
-            <button className={`folder-row${noteView === "pinned" ? " selected" : ""}`} aria-current={noteView === "pinned" ? "page" : undefined} onClick={() => switchToSpecialView("pinned")}><Star size={16} className="folder-icon" /><span>Избранное</span><span className="folder-count">{pinnedDocs.length}</span></button>
-            <button className={`folder-row${noteView === "recent" ? " selected" : ""}`} aria-current={noteView === "recent" ? "page" : undefined} onClick={() => switchToSpecialView("recent")}><Clock3 size={16} className="folder-icon" /><span>Недавние</span></button>
-          </section>
-          <section className="nav-section" aria-labelledby="projects-heading">
-            <div className="section-label"><h2 id="projects-heading">Проекты</h2><button className="icon-button tiny" aria-label="Добавить проект" title="Добавить проект" onClick={addFolder}><Plus size={16} /></button></div>
-            {folders.map((name) => <button key={name} className={`folder-row${noteView === "folder" && folder === name ? " selected" : ""}`} aria-current={noteView === "folder" && folder === name ? "page" : undefined} onClick={() => handleFolderSelect(name)}><Folder size={16} className="folder-icon" /><span>{name === "Архив" ? "Архив · проект" : name}</span><span className="folder-count">{docs.filter((doc) => doc.folder === name && !doc.deletedAt && !doc.archived).length}</span></button>)}
-          </section>
-          <section className="nav-section notes-section" aria-label="Заметки раздела">
-            <div className="section-label"><h2>{noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : "Заметки"}</h2><span className="notes-count">{filteredDocs.length}</span></div>
-            <ul className="notes-list">
-              {filteredDocs.map((doc) => <li key={doc.id}><button className={doc.id === activeId ? "is-current" : undefined} aria-current={doc.id === activeId ? "true" : undefined} title={doc.title} onClick={() => selectDocument(doc)}><FileText size={14} aria-hidden="true" /><span>{doc.title}</span></button></li>)}
-              {filteredDocs.length === 0 && <li className="notes-empty">В этом разделе нет заметок</li>}
-            </ul>
-          </section>
-          <section className="nav-section library-section" aria-label="Архив и корзина">
-            <button className={`folder-row${noteView === "archive" ? " selected" : ""}`} aria-current={noteView === "archive" ? "page" : undefined} onClick={() => switchToSpecialView("archive")}><Archive size={16} className="folder-icon" /><span>Архив</span><span className="folder-count">{docs.filter((doc) => doc.archived && !doc.deletedAt).length}</span></button>
-            <button className={`folder-row${noteView === "trash" ? " selected" : ""}`} aria-current={noteView === "trash" ? "page" : undefined} onClick={() => switchToSpecialView("trash")}><Trash2 size={16} className="folder-icon" /><span>Корзина</span><span className="folder-count">{docs.filter((doc) => doc.deletedAt).length}</span></button>
-          </section>
-          {allTags.length > 0 && <details className="nav-section tags-section" open={tagsOpen || tagFilter !== null} onToggle={(event) => { const open = (event.currentTarget as HTMLDetailsElement).open; setTagsOpen(open); try { window.localStorage.setItem("nh4-tags-open", open ? "1" : "0"); } catch { /* optional */ } }}>
-            <summary className="tags-summary"><Hash size={14} aria-hidden="true" /><span>Метки</span><span className="notes-count">{allTags.length}{tagFilter ? ` · ${tagFilter}` : ""}</span><ChevronDown size={14} className="tags-chevron" aria-hidden="true" /></summary>
-            <div className="tag-cloud">
-              {allTags.map(([tag, count]) => <button key={tag} className={`tag-chip${tagFilter === tag ? " is-on" : ""}`} aria-pressed={tagFilter === tag} title={tagFilter === tag ? "Показать все заметки" : `Только заметки с меткой «${tag}»`} onClick={() => setTagFilter((current) => current === tag ? null : tag)}><Hash size={12} />{tag}<span>{count}</span></button>)}
-            </div>
-          </details>}
-          <div className="sidebar-spacer" />
-          <div className="sidebar-footer"><span className="sync-indicator"><Check size={14} /> Локальное хранилище</span></div>
-          </div>
-          <nav className="rail" aria-label="Быстрые разделы">
-            <button type="button" className="rail-button" aria-label="Новая заметка" title="Новая заметка" onClick={addDocument}><Plus size={17} /></button>
-            <button type="button" className={`rail-button${railMenu === "pinned" ? " is-on" : ""}`} aria-label="Избранное" title="Избранное" aria-expanded={railMenu === "pinned"} onClick={() => setRailMenu((current) => current === "pinned" ? null : "pinned")}><Star size={17} /></button>
-            <button type="button" className={`rail-button${railMenu === "recent" ? " is-on" : ""}`} aria-label="Недавние" title="Недавние" aria-expanded={railMenu === "recent"} onClick={() => setRailMenu((current) => current === "recent" ? null : "recent")}><Clock3 size={17} /></button>
-            <button type="button" className={`rail-button${noteView === "archive" ? " is-on" : ""}`} aria-label="Архив" title="Архив" onClick={() => switchToSpecialView("archive")}><Archive size={17} /></button>
-            <button type="button" className={`rail-button${noteView === "trash" ? " is-on" : ""}`} aria-label="Корзина" title="Корзина" onClick={() => switchToSpecialView("trash")}><Trash2 size={17} />{trashCount > 0 && <span className="rail-badge">{trashCount}</span>}</button>
-          </nav>
         </aside>
         {railMenu && <div className="rail-backdrop" onMouseDown={() => setRailMenu(null)}><div className="rail-pop note-toolbar-menu" role="menu" aria-label={railMenu === "pinned" ? "Избранные заметки" : "Недавние заметки"} onMouseDown={(event) => event.stopPropagation()}>
           <div className="rail-pop-title">{railMenu === "pinned" ? "Избранное" : "Недавние"}</div>

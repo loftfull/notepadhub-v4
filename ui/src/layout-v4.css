@@ -676,3 +676,28 @@
 .app-shell .main-panel { min-height: 0; }
 .app-shell .editor-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .app-shell .editor-scroll.is-split .editor-column { max-height: 100%; }
+
+/* ------------------------------------------------------------------ v4.7: the library — projects on top, notes below, one block of sections, settings at the bottom */
+.app-shell .sidebar { overflow: visible; }
+.app-shell .sidebar-toolbar { display: flex; align-items: center; gap: 4px; height: 34px; margin: 0 0 6px; padding: 0 2px 0 6px; }
+.app-shell .sidebar-toolbar .sidebar-caption { flex: 1; margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .02em; text-transform: none; color: var(--ink); }
+.app-shell .workspace.nav-collapsed .sidebar-caption, .app-shell .workspace.nav-collapsed .sidebar-add { display: none; }
+.app-shell .projects-section { margin-top: 0; flex: 0 1 auto; max-height: 34%; overflow-y: auto; scrollbar-width: none; }
+.app-shell .projects-section::-webkit-scrollbar, .app-shell .notes-list::-webkit-scrollbar { display: none; }
+.app-shell .notes-section { margin-top: 10px; }
+.app-shell .notes-list { scrollbar-width: none; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent); padding-bottom: 14px; }
+.app-shell .sections-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 8px 0 0; }
+.app-shell .section-tile { display: flex; align-items: center; gap: 6px; min-width: 0; height: 34px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink-soft); font: inherit; font-size: 13px; cursor: pointer; }
+.app-shell .section-tile span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.app-shell .section-tile b { font-weight: 600; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ink-quiet); }
+.app-shell .section-tile:hover { background: var(--surface-hover); color: var(--ink); }
+.app-shell .section-tile.selected { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-strong); }
+.app-shell .sidebar > .settings-menu { margin-top: 8px; position: relative; flex: 0 0 auto; }
+.app-shell .sidebar > .settings-menu > summary { display: flex; align-items: center; gap: 8px; width: 100%; height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 13.5px; cursor: pointer; list-style: none; }
+.app-shell .sidebar > .settings-menu > summary::-webkit-details-marker { display: none; }
+.app-shell .sidebar > .settings-menu > summary:hover, .app-shell .sidebar > .settings-menu[open] > summary { background: var(--surface-hover); color: var(--ink); }
+.app-shell .sidebar > .settings-menu .note-toolbar-menu { top: auto; bottom: calc(100% + 6px); left: 0; right: auto; width: 300px; max-width: calc(100vw - 24px); }
+.app-shell .workspace.nav-collapsed .sidebar > .settings-menu { margin-top: auto; }
+.app-shell .workspace.nav-collapsed .sidebar > .settings-menu > summary { width: 36px; padding: 0; justify-content: center; margin: 0 auto; }
+.app-shell .workspace.nav-collapsed .sidebar > .settings-menu > summary span { display: none; }
+.app-shell .workspace.nav-collapsed .sidebar > .settings-menu .note-toolbar-menu { bottom: 0; left: calc(100% + 10px); }
