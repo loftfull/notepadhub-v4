@@ -900,3 +900,12 @@
 }
 .app-shell .statusbar button, .app-shell .statusbar span { white-space: nowrap; }
 .app-shell .status-left { overflow: hidden; }
+
+/* v4.15 smooth fold: the grid row goes 0fr <-> 1fr, the content fades while it closes */
+.app-shell .fold { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-base) var(--ease-move); }
+.app-shell .fold[data-open="true"] { grid-template-rows: 1fr; }
+.app-shell .fold > .fold-inner { min-height: 0; overflow: hidden; opacity: 0; transition: opacity var(--dur-fast) var(--ease-exit); }
+.app-shell .fold[data-open="true"] > .fold-inner { opacity: 1; transition-timing-function: var(--ease-enter); }
+.app-shell .fold-host { list-style: none; margin: 0; padding: 0; }
+.app-shell .fold-list { list-style: none; margin: 0; padding: 0; }
+.app-shell .fold-host > .fold > .fold-inner { overflow: clip; overflow-clip-margin: 2px; }

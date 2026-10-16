@@ -311,6 +311,11 @@ try {
 
   // 4b. AI through the host: streamed answer from the (fake) local model appears as a proposal
   await page.getByRole("button", { name: "Открыть AI-помощник" }).click();
+  // the panel picks its service when the status arrives: wait for the fake local model, or the free default service would answer (a real network call)
+  await page.evaluate(() => { const d = document.querySelector(".ais-model"); if (d) d.open = true; });
+  const onComputer = page.getByRole("radio", { name: /На компьютере/ });
+  if ((await onComputer.getAttribute("aria-checked").catch(() => "true")) !== "true") { await onComputer.click(); await sleep(1200); }
+  await page.evaluate(() => { const d = document.querySelector(".ais-model"); if (d) d.open = false; });
   const run = page.getByRole("button", { name: "Исправить", exact: true });
   await run.waitFor({ timeout: 15000 });
   await page.waitForFunction(() => { const b = [...document.querySelectorAll("button")].find((x) => x.textContent?.trim() === "Исправить"); return b && !b.disabled; }, null, { timeout: 15000 });

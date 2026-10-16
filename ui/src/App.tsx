@@ -8,6 +8,7 @@ import { INSIGHTS_HEADING, MAX_INSTRUCTION, TRANSFORMATIONS, insightMarkdown, lo
 import { TransformationsDialog } from "./components/TransformationsDialog";
 import { TrashView } from "./components/TrashView";
 import { LockScreen, PasswordDialog } from "./components/PasswordParts";
+import { Fold } from "./components/Fold";
 import { parseAiAnalysis } from "./aiAnalysis";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BlockNoteView } from "@blocknote/mantine";
@@ -132,19 +133,19 @@ function projectPath(name: string, parents: Readonly<Record<string, string>>): s
   return path.join(" / ");
 }
 /** Projects in tree order (parent, then its children) with their depth. A project whose parent is unknown counts as top level. */
-function projectRows(folders: readonly string[], parents: Readonly<Record<string, string>>, closed: readonly string[]): Array<{ name: string; depth: number; hasChildren: boolean }> {
+function projectRows(folders: readonly string[], parents: Readonly<Record<string, string>>, closed: readonly string[]): Array<{ name: string; depth: number; hasChildren: boolean; hidden: boolean }> {
   const known = new Set(folders);
   const kids = (parent: string) => folders.filter((name) => (parents[name] && known.has(parents[name]) ? parents[name] : "") === parent);
-  const rows: Array<{ name: string; depth: number; hasChildren: boolean }> = [];
-  const walk = (parent: string, depth: number, seen: Set<string>) => {
+  const rows: Array<{ name: string; depth: number; hasChildren: boolean; hidden: boolean }> = [];
+  const walk = (parent: string, depth: number, seen: Set<string>, hidden: boolean) => {
     for (const name of kids(parent)) {
       if (seen.has(name)) continue;
       const children = kids(name);
-      rows.push({ name, depth, hasChildren: children.length > 0 });
-      if (children.length > 0 && !closed.includes(name)) walk(name, depth + 1, new Set([...seen, name]));
+      rows.push({ name, depth, hasChildren: children.length > 0, hidden });
+      if (children.length > 0) walk(name, depth + 1, new Set([...seen, name]), hidden || closed.includes(name));
     }
   };
-  walk("", 0, new Set());
+  walk("", 0, new Set(), false);
   return rows;
 }
 
@@ -2530,12 +2531,12 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
             onDragOver={(event) => { if (dragProject && dragNotes.length === 0) { event.preventDefault(); setDropTarget(""); } }}
             onDrop={(event) => { if (dragProject && dragNotes.length === 0) { event.preventDefault(); moveProjectTo(dragProject, ""); setDragProject(null); setDropTarget(null); } }}>
             <div className="folder-item"><span className="folder-fold-gap" aria-hidden="true" /><button className={`folder-row all-row${noteView === "all" ? " selected" : ""}`} aria-current={noteView === "all" ? "page" : undefined} onClick={() => switchToSpecialView("all")}><FileText size={16} className="folder-icon" /><span>Все заметки</span><span className="folder-count">{docs.filter((doc) => !doc.deletedAt && !doc.archived).length}</span></button></div>
-            {projectRows(folders, parents, closedProjects).map(({ name, depth, hasChildren }) => {
+            {projectRows(folders, parents, closedProjects).map(({ name, depth, hasChildren, hidden }) => {
               const system = SYSTEM_PROJECTS.includes(name);
               const scope = subNotes ? projectScope(name, parents) : new Set([name]);
               const count = docs.filter((doc) => scope.has(doc.folder) && !doc.deletedAt && !doc.archived).length;
               const open = !closedProjects.includes(name);
-              return <div key={name} className={`folder-item${flashFolder === name ? " is-flash" : ""}${dropTarget === name ? " is-drop" : ""}${dragProject === name ? " is-dragged" : ""}`} style={{ paddingLeft: depth * 14 }} data-depth={depth}
+              return <Fold key={name} open={!hidden}><div className={`folder-item${flashFolder === name ? " is-flash" : ""}${dropTarget === name ? " is-drop" : ""}${dragProject === name ? " is-dragged" : ""}`} style={{ paddingLeft: depth * 14 }} data-depth={depth}
                 draggable={!system}
                 onDragStart={(event) => { if (system) return; event.dataTransfer.setData("text/plain", name); event.dataTransfer.effectAllowed = "move"; setDragProject(name); }}
                 onDragEnd={() => { setDragProject(null); setDropTarget(null); }}
@@ -2546,7 +2547,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
                   : <span className="folder-fold-gap" aria-hidden="true" />}
                 <button className={`folder-row${noteView === "folder" && folder === name ? " selected" : ""}`} aria-current={noteView === "folder" && folder === name ? "page" : undefined} onClick={() => handleFolderSelect(name)}><Folder size={16} className="folder-icon" /><span>{name === "Архив" ? "Архив · проект" : name}</span><span className="folder-count">{count}</span></button>
                 {!system && <button type="button" className="folder-add" aria-label={`Новый вложенный проект в «${name}»`} title="Новый вложенный проект" onClick={() => addFolder(name)}><FolderPlus size={14} aria-hidden="true" /></button>}
-              </div>;
+              </div></Fold>;
             })}
           </section>
           <section className="nav-section notes-section" aria-label="Заметки раздела">
@@ -2561,7 +2562,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
             <ul className="notes-list">
               {listGroups.map((group) => <Fragment key={group.name || "all"}>
                 {group.name && <li className="notes-group"><button type="button" aria-expanded={!closedGroups.includes(group.name)} onClick={() => setClosedGroups((current) => current.includes(group.name) ? current.filter((x) => x !== group.name) : [...current, group.name])}><ChevronDown size={13} className="notes-group-chevron" aria-hidden="true" />{group.name}<small>{group.items.length}</small></button></li>}
-                {!closedGroups.includes(group.name) && group.items.map((doc) => <li key={doc.id}><button className={`${doc.id === activeId ? "is-current" : ""}${picked.includes(doc.id) ? " is-picked" : ""}`.trim() || undefined} aria-current={doc.id === activeId ? "true" : undefined} aria-selected={picked.includes(doc.id) || undefined} title={doc.protected ? `${doc.title} (защищена паролем)` : doc.title} draggable={!doc.deletedAt} onDragStart={(event) => { const ids = picked.includes(doc.id) ? picked : [doc.id]; event.dataTransfer.setData("text/plain", ids.join(",")); event.dataTransfer.effectAllowed = "move"; setDragNotes(ids); }} onDragEnd={() => { setDragNotes([]); setDropTarget(null); }} onClick={(event) => pickNote(doc, event)}>{doc.protected ? <Lock size={14} aria-hidden="true" /> : <FileText size={14} aria-hidden="true" />}<span className="note-line"><span className="note-name">{doc.title}</span>{notesPreview && snippetOf(doc) && <small className="note-snippet">{snippetOf(doc)}</small>}</span></button></li>)}
+                <li className="fold-host"><Fold open={!closedGroups.includes(group.name)}><ul className="fold-list">{group.items.map((doc) => <li key={doc.id}><button className={`${doc.id === activeId ? "is-current" : ""}${picked.includes(doc.id) ? " is-picked" : ""}`.trim() || undefined} aria-current={doc.id === activeId ? "true" : undefined} aria-selected={picked.includes(doc.id) || undefined} title={doc.protected ? `${doc.title} (защищена паролем)` : doc.title} draggable={!doc.deletedAt} onDragStart={(event) => { const ids = picked.includes(doc.id) ? picked : [doc.id]; event.dataTransfer.setData("text/plain", ids.join(",")); event.dataTransfer.effectAllowed = "move"; setDragNotes(ids); }} onDragEnd={() => { setDragNotes([]); setDropTarget(null); }} onClick={(event) => pickNote(doc, event)}>{doc.protected ? <Lock size={14} aria-hidden="true" /> : <FileText size={14} aria-hidden="true" />}<span className="note-line"><span className="note-name">{doc.title}</span>{notesPreview && snippetOf(doc) && <small className="note-snippet">{snippetOf(doc)}</small>}</span></button></li>)}</ul></Fold></li>
               </Fragment>)}
               {filteredDocs.length === 0 && <li className="notes-empty">В этом разделе нет заметок</li>}
             </ul>

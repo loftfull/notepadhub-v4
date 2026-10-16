@@ -56,7 +56,7 @@ try {
   await page.locator(".notes-group button", { hasText: "Сегодня" }).click();
   await page.getByRole("button", { name: /Показывать начало текста/ }).click();
   await sleep(300);
-  const snippet = await page.locator(".notes-list li", { hasText: "Третья" }).locator(".note-snippet").innerText().catch(() => "");
+  const snippet = await page.locator(".notes-list li:not(.fold-host)", { hasText: "Третья" }).first().locator(".note-snippet").innerText().catch(() => "");
   check("the first line of the text shows under the title on request", /Просто третья заметка/.test(snippet), snippet);
   await page.getByRole("button", { name: /Показывать начало текста/ }).click();
   await page.getByRole("button", { name: /Сортировка: по изменению/ }).click();
@@ -147,8 +147,10 @@ try {
   await sleep(300);
   check("and switches back", (await page.locator(".notes-list .note-name", { hasText: "Договор" }).count()) === 1);
   await page.getByRole("button", { name: "Свернуть проект «Работа»" }).click();
+  await sleep(450);
   check("a parent folds and hides its nested projects", (await page.locator(".folder-item", { hasText: "Клиенты" }).count()) === 0);
   await page.getByRole("button", { name: "Развернуть проект «Работа»" }).click();
+  await sleep(450);
   await page.locator(".folder-item", { hasText: "Клиенты" }).dragTo(page.locator(".projects-section"), { targetPosition: { x: 20, y: (await page.locator(".projects-section").boundingBox()).height - 3 } });
   await sleep(500);
   check("dragging a project to the free place under the list makes it top level", (await page.locator(".folder-item[data-depth='0']", { hasText: "Клиенты" }).count()) === 1);
