@@ -251,6 +251,8 @@ try {
   await page.getByRole("dialog").getByRole("textbox").fill("работа, идеи ,работа");
   await page.getByRole("button", { name: "Готово" }).click();
   check("several tags are saved to the note file", await waitDisk(() => readMeta(n.Id).Tags === "работа, идеи"), String(readMeta(n.Id).Tags));
+  if (!(await page.locator(".tags-section[open]").count())) await page.locator(".tags-summary").click();   // tags are folded by default
+  check("the tags section is folded into one line until opened", (await page.locator(".tags-summary").count()) === 1);
   await page.locator(".tag-chip", { hasText: "идеи" }).click();
   const listCount = async () => Number(((await page.locator(".tabs-all summary").getAttribute("aria-label")) ?? "").replace(/\D+/g, ""));
   const tabsWithTag = await listCount();

@@ -408,7 +408,7 @@ export function AiAssistantPanel({
           <div className="ais-chips">
             {visibleOperations.map((operation) => {
               const Icon = operationIcons[operation.id] ?? Sparkles;
-              const needsNote = (operation.id === "structure" && scope !== "note") || (scope === "linked" && !["summarize"].includes(operation.id));
+              const needsNote = (scope === "linked" && !["summarize"].includes(operation.id));
               return <button key={operation.id} className="ais-chip" title={needsNote ? (scope === "linked" ? "Для связанных заметок доступны изучение и свой вопрос" : "Доступно в режиме «Вся заметка»") : operationHints[operation.id]} disabled={!canStart || needsNote} onClick={() => onRun(operation.id)}><Icon size={14} aria-hidden="true" />{operation.label}</button>;
             })}
           </div>

@@ -578,3 +578,7 @@
 .app-shell .tags-section .tag-chip span { font-size: 11px; opacity: .7; }
 .app-shell .notes-clear { border: 0; background: transparent; color: var(--danger, #b3261e); font: inherit; font-size: 12px; cursor: pointer; padding: 0 4px; }
 .app-shell .notes-clear:hover { text-decoration: underline; }
+
+/* layers: the top bar (its menus) is above the AI panel; dialogs are above everything */
+.app-shell .topbar { z-index: 50; }
+.form-backdrop, .modal-backdrop { z-index: 90; }

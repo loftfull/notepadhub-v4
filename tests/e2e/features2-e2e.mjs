@@ -136,6 +136,8 @@ try {
   await sleep(600);
 
   // ---- title and tags from the content
+  if (await page.getByRole("button", { name: "Закрыть AI-помощник" }).count()) await page.getByRole("button", { name: "Закрыть AI-помощник" }).first().click();
+  await sleep(500);
   await page.locator("summary[aria-label='Дополнительные действия заметки']").click();
   await page.getByRole("button", { name: /Название и метки по содержимому/ }).click();
   await page.waitForSelector("#meta-title", { timeout: 10000 });
