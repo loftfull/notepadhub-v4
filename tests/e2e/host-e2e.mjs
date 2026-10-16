@@ -78,7 +78,7 @@ async function connect() {
 }
 
 async function waitSaved(page) {
-  await page.waitForFunction(() => /^(Сохранено|Все изменения сохранены)$/.test(document.querySelector(".save-label span")?.textContent ?? ""), null, { timeout: 15000 });
+  await page.waitForFunction(() => /^Сохранено$/.test(document.querySelector(".status-save")?.textContent ?? ""), null, { timeout: 15000 });
 }
 async function waitDisk(fn, ms = 15000) { const end = Date.now() + ms; while (Date.now() < end) { try { if (fn()) return true; } catch { /* file mid-write */ } await sleep(250); } return false; }
 const readMeta = (id) => JSON.parse(fs.readFileSync(path.join(metaDir, id + ".json"), "utf8"));
@@ -170,7 +170,7 @@ try {
   // 3b. empty notes that point to readable text files can be filled on request (user picks, paths are shown)
   const emptyWithFile = () => originalIds.filter((id) => { const m = readMeta(id); return m.SourceType === "file" && (!fs.existsSync(path.join(contentDir, id + ".txt")) || fs.statSync(path.join(contentDir, id + ".txt")).size === 0); }).length;
   const emptyBefore = emptyWithFile();
-  await page.locator("summary[aria-label='Файлы и данные']").click();
+  await page.locator("summary[aria-label='Настройки приложения']").click();
   await page.getByRole("button", { name: "Подтянуть текст из внешних файлов…" }).click();
   await page.getByRole("heading", { name: "Подтянуть текст из внешних файлов" }).waitFor({ timeout: 10000 });
   await page.waitForFunction(() => !document.querySelector("[role=status]")?.textContent?.includes("Поиск"), null, { timeout: 10000 });
@@ -229,7 +229,7 @@ try {
   await page.keyboard.press("Escape");
   await waitSaved(page);
   check("text restored after replacing back", await waitDisk(() => !fs.readFileSync(path.join(contentDir, n.Id + ".txt"), "utf8").includes(marker + "-R")));
-  check("status bar shows the word counter", /сл\./.test(await page.locator(".statusbar").innerText()));
+  check("status bar shows the word counter", /слов/.test(await page.locator(".statusbar").innerText()) && /знаков/.test(await page.locator(".statusbar").innerText()));
   await editor.click();
   await page.keyboard.press("Control+=");
   check("text zoom grows with Ctrl+=", (await page.locator(".statusbar").innerText()).includes("110%"));

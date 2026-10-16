@@ -36,7 +36,7 @@ try {
     const g = await page.evaluate(() => { const b = (s) => { const e = document.querySelector(s); return e ? Math.round(e.getBoundingClientRect().top) : null; }; return { sheetTop: b(".editor-card"), overflowX: document.documentElement.scrollWidth > innerWidth }; });
     console.log(`${name} ${w}x${h}`, JSON.stringify(g));
     if (name === "wide") {
-      for (const [label, selector] of [["menu-library", "summary[aria-label='Файлы и данные']"], ["menu-note", "summary[aria-label='Дополнительные действия заметки']"], ["menu-tabs", "summary[aria-label^='Все заметки раздела']"]]) {
+      for (const [label, selector] of [["menu-library", "summary[aria-label='Настройки приложения']"], ["menu-note", "summary[aria-label='Дополнительные действия заметки']"], ["menu-tabs", "summary[aria-label^='Все заметки раздела']"]]) {
         await page.locator(selector).click();
         await sleep(300);
         await page.screenshot({ path: path.join(outDir, `${label}.png`) });

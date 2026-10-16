@@ -150,7 +150,7 @@ try {
   check("the local model improves the title and tags", modelTitle === "Заголовок от модели" && modelTags.includes("тест"), JSON.stringify({ modelTitle, modelTags }));
   await page.getByRole("button", { name: "Применить", exact: true }).click();
   await sleep(800);
-  check("the note gets the title and the tags", (await page.locator(".crumb-title").innerText()).includes("Заголовок от модели") && (await page.locator(".tag-pill").count()) > 0);
+  check("the note gets the title and the tags", (await page.locator(".crumb-title").innerText()).includes("Заголовок от модели") && (await page.locator(".status-tags .status-tag").count()) > 0);
 
   // ---- an OpenAI-compatible service
   await page.getByRole("button", { name: "Открыть AI-помощник" }).click();

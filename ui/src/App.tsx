@@ -14,7 +14,7 @@ import { useCreateBlockNote } from "@blocknote/react";
 import { ru } from "@blocknote/core/locales";
 import type { PartialBlock } from "@blocknote/core";
 import {
-  Archive, ArrowDownToLine, Star, Check, ChevronDown, Clock3, Command, Copy, Download, FileText,
+  Archive, ArrowDownToLine, ChevronLeft, ChevronRight, CircleAlert, Minus, Settings, Star, Check, ChevronDown, Clock3, Command, Copy, Download, FileText,
   Folder, FolderInput, FolderOpen, Hash, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Columns2, ImagePlus, LoaderCircle, Redo2, Tag, Wand2, RotateCcw, Search, Undo2,
   Sparkles, Sun, Trash2, X, Eye, Pin, PinOff, List, Ellipsis, Info,
 } from "lucide-react";
@@ -72,6 +72,18 @@ function sampleContent(title: string): PartialBlock[] {
     { type: "heading", props: { level: 1 }, content: title },
     { type: "paragraph", content: "Это демонстрационная заметка. Изменения сохраняются локально в прототипе и не затрагивают файлы Notepad Hub." },
   ];
+}
+
+/** Russian plural: 1 слово, 2 слова, 5 слов (21 слово, 12 слов). */
+function plural(n: number, forms: [string, string, string]): string {
+  const m10 = n % 10, m100 = n % 100;
+  return m10 === 1 && m100 !== 11 ? forms[0] : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? forms[1] : forms[2];
+}
+
+const AUTO_NAME = /^Заметка \d+$/;
+/** The next automatic name: "Заметка N", N = the count of live automatically named notes + 1. */
+function nextAutoName(docs: readonly { title: string; deletedAt?: string }[]): string {
+  return `Заметка ${docs.filter((doc) => !doc.deletedAt && AUTO_NAME.test(doc.title)).length + 1}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -145,35 +157,6 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[character] ?? character);
-}
-
-function safePreviewDocument(title: string, blocks: PartialBlock[], dark: boolean): string {
-  const body = blocks.map((block) => {
-    const text = escapeHtml(blockText(block.content));
-    const props: Record<string, unknown> = isRecord(block.props as unknown) ? block.props as unknown as Record<string, unknown> : {};
-    switch (block.type) {
-      case "heading": {
-        const level = props.level === 2 || props.level === 3 ? props.level : 1;
-        return `<h${level}>${text}</h${level}>`;
-      }
-      case "paragraph":
-        return `<p>${text}</p>`;
-      case "bulletListItem":
-        return `<ul><li>${text}</li></ul>`;
-      case "numberedListItem":
-        return `<ol><li>${text}</li></ol>`;
-      case "checkListItem":
-        return `<ul class="checklist"><li><span aria-hidden="true">${props.checked === true ? "☑" : "☐"}</span> ${text}</li></ul>`;
-      default:
-        return "";
-    }
-  }).join("\n");
-
-  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title><style>
-    *{box-sizing:border-box}body{margin:0;padding:32px;max-width:860px;font:16px/1.7 system-ui,sans-serif;color:#202124;background:#fff;overflow-wrap:anywhere}
-    h1,h2,h3{line-height:1.25}p{white-space:pre-wrap}ul,ol{padding-left:1.5em}.checklist{list-style:none;padding-left:0}
-    body.dark{color:#eee;background:#202124}
-  </style></head><body${dark ? ' class="dark"' : ""}>${body}</body></html>`;
 }
 
 type InspectorProps = {
@@ -272,6 +255,13 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const docsRef = useRef(initialState.docs);
   const contentsRef = useRef(initialState.contents);
   useEffect(() => { docsRef.current = docs; contentsRef.current = contents; });
+  // "Заметка N" numbers follow the order of the automatically named notes: they close up when a note is renamed, trashed or deleted
+  useEffect(() => {
+    let n = 0;
+    const wanted = new Map<string, string>();
+    for (const doc of docs) { if (!doc.deletedAt && AUTO_NAME.test(doc.title)) { n += 1; if (doc.title !== `Заметка ${n}`) wanted.set(doc.id, `Заметка ${n}`); } }
+    if (wanted.size > 0) setDocs((current) => current.map((doc) => wanted.has(doc.id) ? { ...doc, title: wanted.get(doc.id)! } : doc));
+  }, [docs]);
   const [query, setQuery] = useState("");
   const [folder, setFolder] = useState(initialState.folder);
   const [noteView, setNoteView] = useState<"folder" | "pinned" | "recent" | "archive" | "trash">("folder");
@@ -284,7 +274,6 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   useEffect(() => { try { localStorage.setItem("nh4-zoom", String(zoom)); } catch { /* storage may be unavailable */ } }, [zoom]);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [find, setFind] = useState<null | { replace: boolean }>(null);
-  const [showPreview, setShowPreview] = useState(false);
   const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
   const [formDialog, setFormDialog] = useState<FormDialog>(null);
   const [notice, setNotice] = useState("");
@@ -336,6 +325,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const [canUndoAi, setCanUndoAi] = useState(false);
   const metaAbortRef = useRef<AbortController | null>(null);
   const [imageDialog, setImageDialog] = useState<null | { kind: "generate" | "edit"; selection: string; note: string; startId?: string; prompt?: string }>(null);
+  const tabsScrollerRef = useRef<HTMLDivElement>(null);
+  const [tabsEdge, setTabsEdge] = useState({ overflow: false, left: false, right: false });   // the tab strip scrolls sideways: arrows and the mouse wheel
   const [trashPane, setTrashPane] = useState(false);   // the trash is shown as a list in the main area
   const [railMenu, setRailMenu] = useState<null | "pinned" | "recent">(null);   // the quick list next to the narrow library column
   const [tagsOpen, setTagsOpen] = useState(() => { try { return window.localStorage.getItem("nh4-tags-open") === "1"; } catch { return false; } });
@@ -365,7 +356,6 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const mobileNavTriggerRef = useRef<HTMLButtonElement>(null);
   const searchTriggerRef = useRef<HTMLButtonElement>(null);
   const searchOriginRef = useRef<HTMLElement | null>(null);
-  const previewTriggerRef = useRef<HTMLButtonElement>(null);
   const aiTriggerRef = useRef<HTMLButtonElement>(null);
   const [promptRecipes] = useState<PromptRecipe[]>(() => {
     try {
@@ -409,6 +399,28 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   openIdsRef.current = openIds;
   const inSection = (doc: DocItem) => noteView === "trash" ? Boolean(doc.deletedAt) : noteView === "archive" ? Boolean(doc.archived) && !doc.deletedAt : !doc.deletedAt && !doc.archived;
   const openTabs = openIds.map((id) => docs.find((doc) => doc.id === id)).filter((doc): doc is DocItem => Boolean(doc) && inSection(doc as DocItem));
+  useEffect(() => {
+    const el = tabsScrollerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const overflow = el.scrollWidth > el.clientWidth + 1;
+      setTabsEdge((current) => { const next = { overflow, left: overflow && el.scrollLeft > 1, right: overflow && el.scrollLeft + el.clientWidth < el.scrollWidth - 1 }; return current.overflow === next.overflow && current.left === next.left && current.right === next.right ? current : next; });
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || el.scrollWidth <= el.clientWidth + 1) return;
+      const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      if (!delta) return;
+      event.preventDefault();
+      el.scrollLeft += delta;
+    };
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    el.addEventListener("wheel", onWheel, { passive: false });
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    if (el.firstElementChild) observer.observe(el.firstElementChild);
+    return () => { el.removeEventListener("scroll", measure); el.removeEventListener("wheel", onWheel); observer.disconnect(); };
+  }, [docs.length, openIds.length]);
 
   // computed only while the search is open (it used to run over every note on every render)
   const searchHits = useMemo(
@@ -606,8 +618,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     editor.replaceBlocks(editor.document, initial);
     setSavedAt("Сохраняем локально…");
   }, [editor, folder]);
-  // a new note has no name yet: the heading is empty and shows a hint, the tab says "Без названия" until a title is typed
-  const addDocument = useCallback(() => createNote("Без названия", ""), [createNote]);
+  // a new note has no name yet: the heading is empty and shows a hint, the tab says "Заметка N" until a title is typed (N is renumbered, see below)
+  const addDocument = useCallback(() => createNote(nextAutoName(docsRef.current), ""), [createNote]);
 
   const selectDocument = useCallback((doc: DocItem) => {
     haltAuto();
@@ -1550,7 +1562,6 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     { id: "daily-note", label: "Заметка за сегодня", hint: "Открыть или создать запись на сегодня", keywords: "дневник сегодня дата ежедневная", icon: Clock3, run: () => openDailyNote() },
     { id: "new-note", label: "Новая заметка", hint: "Создать заметку", keywords: "создать новая заметка", icon: Plus, run: () => addDocument() },
     { id: "toggle-ai", shortcut: "Ctrl+J", label: activeInspector === "ai" ? "Закрыть AI-помощник" : "Открыть AI-помощник", hint: "Панель без запуска генерации", keywords: "ai помощник открыть закрыть", icon: Sparkles, run: () => activeInspector === "ai" ? setActiveInspector(null) : openAiAssistant("paragraph") },
-    { id: "toggle-preview", label: showPreview ? "Редактировать заметку" : "Предпросмотр", hint: "Переключить режим просмотра", keywords: "предпросмотр редактировать просмотр", icon: Eye, run: () => setShowPreview((value) => !value) },
     { id: "properties", label: activeInspector === "properties" ? "Закрыть свойства" : "Открыть свойства", hint: "Свойства текущей заметки", keywords: "свойства метка папка", icon: ChevronDown, disabled: !activeDoc, run: () => setActiveInspector((current) => current === "properties" ? null : "properties") },
     { id: "rename", label: "Переименовать заметку", hint: "Изменить название", keywords: "переименовать название", icon: Pencil, disabled: !activeDoc, run: () => activeDoc && setFormDialog({ kind: "rename", title: "Переименовать заметку", value: activeDoc.title, hint: "Название заметки" }) },
     { id: "move", label: "Переместить заметку", hint: "Выбрать проект", keywords: "переместить папка проект", icon: FolderInput, disabled: !activeDoc, run: () => moveActiveNote() },
@@ -1627,8 +1638,10 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   useEffect(() => { setFind(null); }, [activeId]);
 
   const noteStats = useMemo(() => {
-    const text = activeId && contents[activeId] ? blocksToText(contents[activeId] as LooseBlock[]) : "";
-    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    // the visible text only: list marks, heading marks and blank lines are not counted
+    const raw = activeId && contents[activeId] ? blocksToText(contents[activeId] as LooseBlock[]) : "";
+    const text = raw.split("\n").map((line) => line.replace(/^\s*(?:#{1,3}\s|[-*]\s(?:\[[ xX]\]\s)?|\d+\.\s|>\s)/, "")).join("\n").replace(/^\s+|\s+$/g, "");
+    const words = text ? text.split(/\s+/).length : 0;
     return { words, chars: text.length };
   }, [activeId, contents]);
 
@@ -1929,6 +1942,17 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     setConfirmDialog({ title: "Восстановить заметки из копии?", message: "Все текущие заметки будут заменены заметками из копии. Прежнее состояние сохранится в файле отката, его можно вернуть тем же способом.", confirm: "Выбрать копию…", danger: true, run: () => void doRestoreBackup() });
   }, [doRestoreBackup]);
 
+  // Ctrl + mouse wheel over the note zooms the text, as in browsers and editors
+  useEffect(() => {
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey || !(event.target as HTMLElement | null)?.closest?.(".editor-scroll")) return;
+      event.preventDefault();
+      setZoom((z) => Math.max(70, Math.min(200, z + (event.deltaY < 0 ? 10 : -10))));
+    };
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => window.removeEventListener("wheel", onWheel);
+  }, []);
+
   useEffect(() => {
     const keyHandler = (event: KeyboardEvent) => {
       const action = matchShortcut(event);
@@ -1939,10 +1963,9 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         case "save": saveDocument(); break;
         case "search": openSearch(); break;
         case "find": case "replace":
-          setShowPreview(false);
           setFind((current) => ({ replace: action === "replace" || Boolean(current?.replace) }));
           break;
-        case "link": setShowPreview(false); setLinkPicker({ query: "", index: 0 }); break;
+        case "link": setLinkPicker({ query: "", index: 0 }); break;
         case "closeTab": if (activeIdRef.current) void closeTabRef.current(activeIdRef.current); break;
         case "ai": openAiAssistant(); break;
         case "newNote": addDocumentRef.current(); break;
@@ -1988,9 +2011,6 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         setRefs(null);
       } else if (linkPicker) {
         setLinkPicker(null);
-      } else if (showPreview) {
-        setShowPreview(false);
-        window.setTimeout(() => previewTriggerRef.current?.focus(), 0);
       } else if (formDialog) {
         setFormDialog(null);
       } else if (showSearch) {
@@ -2009,7 +2029,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     };
     window.addEventListener("keydown", escapeHandler);
     return () => window.removeEventListener("keydown", escapeHandler);
-  }, [activeInspector, closeAiAssistant, conflictDialog, formDialog, history, linkPicker, refs, showShortcuts, restoreSearchFocus, showPreview, showSearch, sidebarCollapsed]);
+  }, [activeInspector, closeAiAssistant, conflictDialog, formDialog, history, linkPicker, refs, showShortcuts, restoreSearchFocus, showSearch, sidebarCollapsed]);
 
   // every modal dialog (form, link picker, conflict, shortcuts, history, referenced files): focus moves in, Tab stays inside, focus returns afterwards
   const anyDialogOpen = Boolean(transformationsOpen || confirmDialog || formDialog || metaDialog || imageDialog || linkPicker || conflictDialog || showShortcuts || history || refs);
@@ -2093,8 +2113,9 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ru"));
   }, [docs, tags]);
   const viewTitle = noteView === "folder" ? folder : noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : noteView === "pinned" ? "Закреплённые" : "Недавние";
-  const savedShort = savedAt === "Все изменения сохранены" ? "Сохранено" : savedAt;
   const saveFailed = /не сохранен/i.test(savedAt);
+  const saveState: "saved" | "saving" | "error" = saveFailed ? "error" : /^Сохраняем|^Сохраняется/.test(savedAt) ? "saving" : "saved";
+  const noteTagList = activeDoc ? parseTags(tags[activeDoc.id]) : [];
   const noteMenuClose = (event: React.MouseEvent<HTMLDivElement>) => { if ((event.target as HTMLElement).closest("button")) event.currentTarget.closest("details")?.removeAttribute("open"); };
 
   return (
@@ -2112,19 +2133,16 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
           <div className="note-status">
             {activeDoc && sourceIssue[activeDoc.id]?.status === "conflict" && <button className="conflict-chip" onClick={() => setConflictDialog(activeDoc.id)} title={sourceIssue[activeDoc.id].message}>Файл изменён снаружи</button>}
             {activeDoc?.writeThrough && !sourceIssue[activeDoc.id] && <span className="file-chip" title={`Правки сохраняются в файл: ${activeDoc.sourcePath}`}><FileText size={13} aria-hidden="true" />файл</span>}
-            <span className={`save-label${saveFailed ? " save-error" : ""}`} role="status" aria-live="polite" aria-label={savedAt} title={savedAt}><Check size={14} /><span>{savedShort}</span></span>
-            {activeDoc && parseTags(tags[activeDoc.id]).length > 0 && <button className="tag-pill" title={`Метки: ${parseTags(tags[activeDoc.id]).join(", ")} — изменить`} onClick={() => setFormDialog({ kind: "tag", title: "Метки заметки", value: tags[activeDoc.id] ?? "", hint: "Метки через запятую" })}><Hash size={13} />{parseTags(tags[activeDoc.id])[0]}{parseTags(tags[activeDoc.id]).length > 1 ? ` +${parseTags(tags[activeDoc.id]).length - 1}` : ""}</button>}
           </div>
         </div>
         <div className="topbar-actions" role="toolbar" aria-label="Инструменты">
           <div className="tb-group" role="group" aria-label="Правка">
-            <button className="icon-button quiet bar-icon" aria-label="Отменить" title="Отменить (Ctrl Z)" disabled={!activeDoc || showPreview} onClick={undoEdit}><Undo2 size={16} /></button>
-            <button className="icon-button quiet bar-icon" aria-label="Повторить" title="Повторить (Ctrl Y)" disabled={!activeDoc || showPreview} onClick={redoEdit}><Redo2 size={16} /></button>
+            <button className="icon-button quiet bar-icon" aria-label="Отменить" title="Отменить (Ctrl Z)" disabled={!activeDoc} onClick={undoEdit}><Undo2 size={16} /></button>
+            <button className="icon-button quiet bar-icon" aria-label="Повторить" title="Повторить (Ctrl Y)" disabled={!activeDoc} onClick={redoEdit}><Redo2 size={16} /></button>
           </div>
           <span className="tb-sep" aria-hidden="true" />
           <div className="tb-group" role="group" aria-label="Вид">
-            <button className={`icon-button quiet bar-icon${secondId ? " is-on" : ""}`} aria-pressed={Boolean(secondId)} aria-label="Две заметки на экране" title="Две заметки рядом: сравнение и перенос выделенного" disabled={!activeDoc || showPreview} onClick={() => { if (secondId) { setSecondId(null); return; } const other = [...openTabs.filter((doc) => doc.id !== activeId), ...docs.filter((doc) => !doc.deletedAt && doc.id !== activeId)].find((doc) => !isPlaceholderNote(doc.id)); if (other) setSecondId(other.id); else setNotice("Нужна ещё одна заметка."); }}><Columns2 size={16} /></button>
-            <button ref={previewTriggerRef} className="icon-button quiet bar-icon" aria-pressed={showPreview} aria-label={showPreview ? "Редактировать" : "Предпросмотр"} title={showPreview ? "Вернуться к редактированию" : "Предпросмотр"} onClick={() => setShowPreview((value) => !value)}>{showPreview ? <Pencil size={16} /> : <Eye size={16} />}</button>
+            <button className={`icon-button quiet bar-icon${secondId ? " is-on" : ""}`} aria-pressed={Boolean(secondId)} aria-label="Две заметки на экране" title="Две заметки рядом: сравнение и перенос выделенного" disabled={!activeDoc} onClick={() => { if (secondId) { setSecondId(null); return; } const other = [...openTabs.filter((doc) => doc.id !== activeId), ...docs.filter((doc) => !doc.deletedAt && doc.id !== activeId)].find((doc) => !isPlaceholderNote(doc.id)); if (other) setSecondId(other.id); else setNotice("Нужна ещё одна заметка."); }}><Columns2 size={16} /></button>
           </div>
           <span className="tb-sep" aria-hidden="true" />
             <button ref={aiTriggerRef} className={`bar-ai${activeInspector === "ai" ? " is-open" : ""}`} aria-label={activeInspector === "ai" ? "Закрыть AI-помощник" : "Открыть AI-помощник"} aria-pressed={activeInspector === "ai"} title="AI-помощник (Ctrl J)" onClick={() => activeInspector === "ai" ? closeAiAssistant() : openAiAssistant("paragraph")}><Sparkles size={15} /><span>AI</span></button>
@@ -2155,17 +2173,21 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
                 {canUndoAi && <button onClick={undoAcceptedAi}><RotateCcw size={14} />Отменить AI-изменение</button>}
               </div>
             </details>
-          <details className="note-toolbar-overflow library-menu">
-            <summary aria-label="Файлы и данные" title="Файлы и данные"><FolderOpen size={16} /><span>Файлы и данные</span><ChevronDown size={14} /></summary>
+          <details className="note-toolbar-overflow library-menu settings-menu">
+            <summary aria-label="Настройки приложения" title="Настройки приложения"><Settings size={16} /><span>Настройки</span><ChevronDown size={14} /></summary>
             <div className="note-toolbar-menu" onClick={noteMenuClose}>
+              <div className="note-toolbar-menu-label">Файлы и данные</div>
               <button onClick={() => (isHosted() ? void handleHostFileOpen() : textInputRef.current?.click())}><FolderOpen size={14} />Открыть файлы…</button>
               <button onClick={handleWindowsImport}><FolderInput size={14} />Перенос из Блокнота Windows (ZIP)…</button>
               {isHosted() && <button onClick={() => void openRefs()}><FolderOpen size={14} />Подтянуть текст из внешних файлов…</button>}
               <div className="note-toolbar-menu-divider" />
+              <div className="note-toolbar-menu-label">Резервные копии</div>
               {isHosted() && <><button onClick={() => void createBackupNow()}><Download size={14} />Создать резервную копию (.nhub)…</button><button onClick={() => void restoreBackupNow()}><RotateCcw size={14} />Восстановить из копии (.nhub)…</button></>}
               <button onClick={exportBackup}><Download size={14} />Сохранить копию JSON (только чтение)</button>
               <div className="note-toolbar-menu-divider" />
+              <div className="note-toolbar-menu-label">Внешний вид и справка</div>
               <button aria-label="Переключить тему" onClick={() => setDark((value) => !value)}>{dark ? <Sun size={14} /> : <Moon size={14} />}{dark ? "Светлая тема" : "Тёмная тема"}</button>
+              <button onClick={() => setShowShortcuts(true)}><Command size={14} />Сочетания клавиш</button>
             </div>
           </details>
         </div>
@@ -2220,7 +2242,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
 
         <main className="main-panel">
           <div className="document-tabs">
-            <div className="tabs-scroller">
+            {tabsEdge.overflow && <button type="button" className="tabs-arrow" aria-label="Прокрутить вкладки влево" title="Влево" disabled={!tabsEdge.left} onClick={() => tabsScrollerRef.current?.scrollBy({ left: -280, behavior: "smooth" })}><ChevronLeft size={16} /></button>}
+            <div className="tabs-scroller" ref={tabsScrollerRef}>
               <div className="tab-list" role={openTabs.length > 0 ? "tablist" : undefined} aria-label={openTabs.length > 0 ? `Открытые заметки: ${viewTitle}` : undefined}>
               {openTabs.map((doc, index) => <div key={doc.id} className={`tab-wrap${doc.id === activeId ? " is-active" : ""}`} onContextMenu={(event) => { event.preventDefault(); setTabMenu({ x: event.clientX, y: event.clientY, id: doc.id }); }} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); void closeTab(doc.id); } }}>
                 <button id={`note-tab-${doc.id}`} data-tab-index={index} role="tab" aria-controls="editor-workspace-panel" aria-selected={doc.id === activeId} tabIndex={doc.id === activeId ? 0 : -1} className={`tab${doc.id === activeId ? " active-tab" : ""}`} title={`${doc.title} (Delete — в корзину, Ctrl+W — закрыть, правая кнопка — меню)`} onKeyDown={(event) => handleTabKeyDown(event, index)} onClick={() => selectDocument(doc)}>{doc.pinned && <Star size={11} className="tab-pin" aria-label="Закреплена" />}<span>{doc.title}</span></button>
@@ -2230,6 +2253,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
               <button className="new-tab" aria-label="Быстро создать заметку" title="Новая заметка" onClick={addDocument}><Plus size={17} /></button>
               {openTabs.length === 0 && <span className="tabs-empty">Нет открытых заметок</span>}
             </div>
+            {tabsEdge.overflow && <button type="button" className="tabs-arrow" aria-label="Прокрутить вкладки вправо" title="Вправо" disabled={!tabsEdge.right} onClick={() => tabsScrollerRef.current?.scrollBy({ left: 280, behavior: "smooth" })}><ChevronRight size={16} /></button>}
             {filteredDocs.length > 0 && <details className="note-toolbar-overflow tabs-all">
               <summary aria-label={`Все заметки раздела: ${filteredDocs.length}`} title="Все заметки раздела"><List size={16} /><span>{filteredDocs.length}</span></summary>
               <div className="note-toolbar-menu tabs-all-menu" role="listbox" aria-label="Все заметки раздела" onClick={noteMenuClose}>
@@ -2247,11 +2271,9 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
           </div>}
           <div id="editor-workspace-panel" className={`editor-scroll${secondId ? " is-split" : ""}`} hidden={!activeDoc || trashPane} role="tabpanel" aria-label={activeDoc ? undefined : "Редактор заметки"} aria-labelledby={activeDoc ? `note-tab-${activeDoc.id}` : undefined} tabIndex={0}>
             <div className="editor-column">
-              {find && !showPreview && <FindBar host={editor._tiptapEditor as unknown as FindHost} withReplace={find.replace} onClose={() => { setFind(null); editor.focus(); }} onToggleReplace={() => setFind((c) => c && ({ replace: !c.replace }))} />}
-              <div className="editor-card" style={{ "--editor-zoom": zoom / 100 } as React.CSSProperties} onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={(e) => void handleDrop(e)}>{showPreview
-                ? <iframe className="safe-html-preview" title={`HTML-предпросмотр заметки «${activeDoc?.title ?? "Новая заметка"}»`} sandbox="" srcDoc={safePreviewDocument(activeDoc?.title ?? "Новая заметка", editor.document, dark)} />
-                : <BlockNoteView editor={editor} theme={dark ? "dark" : "light"} onChange={handleEditorChange} slashMenu sideMenu={false} />}</div>
-              {activeDoc && !showPreview && (() => {
+              {find && <FindBar host={editor._tiptapEditor as unknown as FindHost} withReplace={find.replace} onClose={() => { setFind(null); editor.focus(); }} onToggleReplace={() => setFind((c) => c && ({ replace: !c.replace }))} />}
+              <div className="editor-card" style={{ "--editor-zoom": zoom / 100 } as React.CSSProperties} onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={(e) => void handleDrop(e)}><BlockNoteView editor={editor} theme={dark ? "dark" : "light"} onChange={handleEditorChange} slashMenu sideMenu={false} /></div>
+              {activeDoc && (() => {
                 const outgoing = linkIndex.outgoing(activeDoc.id);
                 const back = linkIndex.backlinks(activeDoc.id);
                 if (back.length + outgoing.length === 0) return null;
@@ -2270,11 +2292,28 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
             </div>}
             {activeInspector === "properties" && <Inspector onClose={() => setActiveInspector(null)} activeDoc={activeDoc} folder={folder} onMove={moveActiveNote} />}
           </div>
-          <footer className="statusbar"><div className="status-left"><span className="status-dot" />{isHosted() ? "Сохраняется на этом компьютере" : "Локально в браузере"}</div><div className="status-right"><span title="Слов и знаков в заметке">{noteStats.words.toLocaleString("ru")} сл. · {noteStats.chars.toLocaleString("ru")} зн.</span><span className="status-divider">·</span><button title="Масштаб текста: Ctrl +, Ctrl −, Ctrl 0" onClick={() => setZoom(100)}>{zoom}%</button><span className="status-divider">·</span><button onClick={() => setShowShortcuts(true)} title="Сочетания клавиш (F1)" aria-label="Сочетания клавиш"><Command size={14} /></button></div></footer>
+          <footer className="statusbar" aria-label="Служебная строка">
+            <div className="status-left">
+              <span className={`status-save is-${saveState}`} role="status" aria-live="polite" title={savedAt}>{saveState === "saved" ? <Check size={14} aria-hidden="true" /> : saveState === "saving" ? <LoaderCircle size={14} className="ai-spinner" aria-hidden="true" /> : <CircleAlert size={14} aria-hidden="true" />}{saveState === "saved" ? "Сохранено" : saveState === "saving" ? "Сохраняется…" : "Не сохранено"}{saveState === "error" && <small>{savedAt.replace(/^Не сохранено:?\s*/i, "").slice(0, 70)}</small>}</span>
+              {activeDoc && <><span className="status-divider" aria-hidden="true">·</span>
+              <button className="status-tags" title="Метки заметки: изменить" onClick={() => setFormDialog({ kind: "tag", title: "Метки заметки", value: tags[activeDoc.id] ?? "", hint: "Метки через запятую" })}><Hash size={13} aria-hidden="true" />{noteTagList.length > 0 ? noteTagList.map((tag) => <span key={tag} className="status-tag">{tag}</span>) : <span className="status-tags-empty">добавить метки</span>}</button></>}
+            </div>
+            <div className="status-right">
+              <span title="Слов и знаков в заметке">{noteStats.words.toLocaleString("ru")} {plural(noteStats.words, ["слово", "слова", "слов"])} · {noteStats.chars.toLocaleString("ru")} {plural(noteStats.chars, ["знак", "знака", "знаков"])}</span>
+              <span className="status-divider" aria-hidden="true">·</span>
+              <span className="status-zoom" role="group" aria-label="Масштаб текста">
+                <button aria-label="Уменьшить масштаб текста" title="Уменьшить (Ctrl −)" disabled={zoom <= 70} onClick={() => setZoom((z) => Math.max(70, z - 10))}><Minus size={13} /></button>
+                <button className="status-zoom-value" title="Вернуть 100% (Ctrl 0). Масштаб: Ctrl +, Ctrl −, Ctrl и колесо мыши" onClick={() => setZoom(100)}>{zoom}%</button>
+                <button aria-label="Увеличить масштаб текста" title="Увеличить (Ctrl +)" disabled={zoom >= 200} onClick={() => setZoom((z) => Math.min(200, z + 10))}><Plus size={13} /></button>
+              </span>
+              <span className="status-divider" aria-hidden="true">·</span>
+              <button onClick={() => setShowShortcuts(true)} title="Сочетания клавиш (F1)" aria-label="Сочетания клавиш"><Command size={14} /></button>
+            </div>
+          </footer>
         </main>
       </div>
 
-      {aiSelection && !showPreview && <div className="selection-ai-toolbar" role="toolbar" aria-label="AI-действия с выделением" style={{ top: aiSelection.top, left: aiSelection.left }}>
+      {aiSelection && <div className="selection-ai-toolbar" role="toolbar" aria-label="AI-действия с выделением" style={{ top: aiSelection.top, left: aiSelection.left }}>
         <button onMouseDown={(event) => event.preventDefault()} onClick={() => openAiAssistant("selection")}><Sparkles size={15} /> Спросить AI <kbd>Ctrl J</kbd></button>
       </div>}
       {activeInspector === "ai" && <div className="ai-resizer" role="separator" aria-orientation="vertical" aria-valuenow={aiWidth} aria-valuemin={340} aria-valuemax={640} aria-label="Ширина AI-помощника (перетащите; двойной щелчок — по умолчанию)" tabIndex={0} onPointerDown={startAiResize} onDoubleClick={() => setAiWidth(400)} onKeyDown={(event) => { if (event.key === "ArrowLeft") setAiWidth((w) => Math.min(640, w + 20)); else if (event.key === "ArrowRight") setAiWidth((w) => Math.max(340, w - 20)); }} />}
@@ -2312,8 +2351,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
           && (aiProvider === "ollama" ? aiProviders?.ollama.configured : aiProvider === "compat" ? aiProviders?.compat?.configured : aiProviders?.openrouter.configured)
           && (aiProvider === "ollama" || (aiProvider === "compat" ? (aiRemoteConsent || (aiProviders?.compat?.local && !cloudModelName(aiModel))) : (aiRemoteConsent && (selectedModel.free || estimatedAiCost !== null)))))}
         onImage={openImageDialog}
-        canImage={Boolean(activeDoc && !activeDoc.deletedAt && !showPreview)}
-        canFormat={Boolean(activeDoc && !activeDoc.deletedAt && !showPreview && formatJob === null)}
+        canImage={Boolean(activeDoc && !activeDoc.deletedAt)}
+        canFormat={Boolean(activeDoc && !activeDoc.deletedAt && formatJob === null)}
         onRun={(operation) => { if (operation === "structure") runAutoFormat(); else if (operation === "custom" && !aiContextText.trim()) { setAiScope("note"); void requestAiTask("custom", { scope: "note" }); } else void requestAiTask(operation); }}
         transformations={transformationList}
         onManageTransformations={() => setTransformationsOpen(true)}

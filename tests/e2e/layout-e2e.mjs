@@ -59,7 +59,7 @@ try {
   const tabText = await page.locator(".tab-wrap.is-active .tab").innerText();
   const crumb = await page.locator(".crumb-title").innerText();
   const h1 = await page.locator(".bn-editor [data-content-type='heading']").first().innerText();
-  check("a new note is called 'Без названия' and its heading is empty with a hint", tabText.trim() === "Без названия" && crumb.includes("Без названия") && h1.trim() === "", JSON.stringify({ tabText, crumb, h1 }));
+  check("a new note is called 'Заметка N' and its heading is empty with a hint", /^Заметка \d+$/.test(tabText.trim()) && crumb.includes(tabText.trim()) && h1.trim() === "", JSON.stringify({ tabText, crumb, h1 }));
 
   // ---- favourites and recent
   await addNote("Избранная", "Первый абзац избранной заметки.");
@@ -116,6 +116,89 @@ try {
   await page.locator(".command-result").first().waitFor({ timeout: 5000 });
   check("a command used lately comes first and is marked", (await page.locator(".command-result").first().innerText()).includes("Переименовать") && (await page.locator(".search-recent").count()) >= 1);
   await page.keyboard.press("Escape");
+
+  // ---- the service line: save state, tags, full words, zoom; no preview button; settings instead of "Файлы и данные"
+  await page.locator(".folder-row", { hasText: "Импорт Windows" }).click();
+  await page.locator(".notes-list button").first().click();
+  await sleep(600);
+  const bar = await page.locator(".statusbar").innerText();
+  check("the bottom line says 'Сохранено' and spells the words and the signs in full (слов, знак)", /Сохранено/.test(bar) && /\d+ слов/.test(bar) && /\d+ знак/.test(bar) && !/Сохраняется на этом/.test(bar), bar.replace(/\s+/g, " ").slice(0, 120));
+  check("the top bar no longer shows the save label, the tag pill or a preview button", (await page.locator(".topbar .save-label, .topbar .tag-pill").count()) === 0 && (await page.getByRole("button", { name: /Предпросмотр|Редактировать$/ }).count()) === 0);
+  await page.locator(".status-tags").click();
+  await page.getByRole("dialog").getByRole("textbox").fill("работа, идеи");
+  await page.getByRole("button", { name: "Готово" }).click();
+  await sleep(600);
+  check("the note tags are shown in the bottom line", (await page.locator(".statusbar .status-tag").allInnerTexts()).join(",") === "работа,идеи");
+  check("'Файлы и данные' moved into the application settings", (await page.locator("summary[aria-label='Файлы и данные']").count()) === 0 && (await page.locator("summary[aria-label='Настройки приложения']").count()) === 1);
+  await page.locator("summary[aria-label='Настройки приложения']").click();
+  const settings = await page.locator(".settings-menu .note-toolbar-menu").innerText();
+  check("the settings menu holds files, backups, theme and shortcuts", /Открыть файлы/.test(settings) && /резервную копию/.test(settings) && /тема/i.test(settings) && /Сочетания клавиш/.test(settings));
+  await page.keyboard.press("Escape");
+  await page.locator(".settings-menu summary").click();
+
+  // ---- zoom: buttons, keys and Ctrl + wheel
+  await page.locator(".editor-column:not(.second-column) .bn-editor").click();
+  await page.getByRole("button", { name: "Увеличить масштаб текста" }).click();
+  check("the zoom plus button grows the text", (await page.locator(".status-zoom-value").innerText()).includes("110%"));
+  await page.mouse.move(700, 400);
+  await page.keyboard.down("Control"); await page.mouse.wheel(0, -100); await page.keyboard.up("Control");
+  await sleep(300);
+  check("Ctrl + wheel zooms the text", (await page.locator(".status-zoom-value").innerText()).includes("120%"));
+  await page.getByRole("button", { name: "Уменьшить масштаб текста" }).click();
+  await page.locator(".status-zoom-value").click();
+  check("the percent resets the zoom to 100%", (await page.locator(".status-zoom-value").innerText()).includes("100%"));
+
+  // ---- the tab strip scrolls sideways
+  const strip = async () => page.evaluate(() => { const e = document.querySelector(".tabs-scroller"); return { sl: Math.round(e.scrollLeft), over: e.scrollWidth > e.clientWidth }; });
+  check("with many tabs the strip has scroll arrows", (await strip()).over && (await page.locator(".tabs-arrow").count()) === 2);
+  const before = (await strip()).sl;
+  await page.locator(".tabs-scroller").hover();
+  await page.mouse.wheel(0, 200);
+  await sleep(400);
+  const afterWheel = (await strip()).sl;
+  await page.getByRole("button", { name: "Прокрутить вкладки вправо" }).click();
+  await sleep(700);
+  const afterRight = (await strip()).sl;
+  await page.getByRole("button", { name: "Прокрутить вкладки влево" }).click();
+  await sleep(700);
+  const afterLeft = (await strip()).sl;
+  check("the mouse wheel and the arrows move the tabs right and left", afterWheel > before && afterRight > afterWheel - 1 && afterLeft < afterRight, JSON.stringify({ before, afterWheel, afterRight, afterLeft }));
+
+  // ---- "Заметка N": numbers follow the order of the automatically named notes
+  const autoTitles = async () => (await page.locator(".tab-wrap .tab").allInnerTexts()).map((t) => t.trim()).filter((t) => /^Заметка \d+$/.test(t));
+  await page.locator(".folder-row", { hasText: "Входящие" }).click();
+  const base = (await autoTitles()).length;
+  const seq = (n) => JSON.stringify(Array.from({ length: n }, (_, i) => `Заметка ${i + 1}`));
+  for (let i = 0; i < 3; i++) { await page.locator(".new-note-button").click(); await sleep(500); }
+  await page.locator(".folder-row", { hasText: "Входящие" }).click();
+  await sleep(400);
+  check("three new notes continue the numbering without gaps", JSON.stringify((await autoTitles()).sort()) === seq(base + 3), JSON.stringify(await autoTitles()));
+  await page.locator(".tab-wrap", { hasText: "Заметка 2" }).first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: /В корзину/ }).click();
+  await page.locator(".confirm-modal .form-submit").click();
+  await sleep(700);
+  check("after one is trashed the rest close up with no gap", JSON.stringify((await autoTitles()).sort()) === seq(base + 2), JSON.stringify(await autoTitles()));
+  await page.locator(".tab-wrap", { hasText: "Заметка 1" }).first().locator(".tab").click();
+  await page.locator("summary[aria-label='Дополнительные действия заметки']").click();
+  await page.locator(".note-menu .note-toolbar-menu").getByRole("button", { name: "Переименовать" }).click();
+  await page.getByRole("dialog").getByRole("textbox").fill("Мой план");
+  await page.getByRole("button", { name: "Готово" }).click();
+  await sleep(800);
+  check("after a rename the numbers close up again", JSON.stringify((await autoTitles()).sort()) === seq(base + 1), JSON.stringify(await autoTitles()));
+
+  // ---- an empty note counts nothing; two long notes side by side never push the window past the screen
+  await page.locator(".new-note-button").click();
+  await sleep(600);
+  check("an empty note says '0 слов · 0 знаков'", /0 слов/.test(await page.locator(".statusbar").innerText()) && /0 знаков/.test(await page.locator(".statusbar").innerText()), (await page.locator(".statusbar").innerText()).replace(/\s+/g, " ").slice(0, 100));
+  await page.locator(".folder-row", { hasText: "Импорт Windows" }).click();
+  await page.locator(".notes-list button").nth(1).click();
+  await sleep(500);
+  await page.getByRole("button", { name: "Две заметки на экране" }).click();
+  await sleep(900);
+  const fit = await page.evaluate(() => ({ doc: document.scrollingElement.scrollHeight, vh: innerHeight }));
+  check("two notes side by side keep the window inside the screen", fit.doc <= fit.vh + 1, JSON.stringify(fit));
+  await page.getByRole("button", { name: "Закрыть правую заметку" }).click();
+  await sleep(400);
 
   // ---- the picture field in the AI panel
   await page.getByRole("button", { name: "Открыть AI-помощник" }).click();
