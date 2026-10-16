@@ -74,7 +74,7 @@ try {
   check("the note menu has the find/replace, copy-link and Explorer items", ["Найти в заметке", "Заменить", "Копировать ссылку на заметку", "Показать в Проводнике", "Содержание и свойства"].every((t) => items.some((x) => x.includes(t))), JSON.stringify(items));
   check("the menu is in groups and 'В корзину' is last, red and alone", (await menu.locator(".note-toolbar-menu-divider").count()) >= 5 && last.includes("В корзину") && (await menu.locator("button.destructive-action").last().innerText()).includes("В корзину"));
   await menu.getByRole("button", { name: /Копировать ссылку на заметку/ }).click();
-  await sleep(500);
+  await sleep(1000);
   check("'Копировать ссылку' tells what was copied", /\[\[.+\]\]/.test(await page.locator(".toast").first().innerText().catch(() => "")), await page.locator(".toast").first().innerText().catch(() => ""));
   await page.locator("summary[aria-label='Дополнительные действия заметки']").click();
   await page.locator(".note-menu .note-toolbar-menu").getByRole("button", { name: /Найти в заметке/ }).click();
@@ -186,6 +186,27 @@ try {
   check("the compact list makes rows lower", rowH <= 27 && (await page.locator(".sidebar.is-dense").count()) === 1, String(rowH));
   await page.locator("summary[aria-label='Настройки приложения']").click();
   await page.getByRole("menuitemcheckbox", { name: /Компактный список/ }).click();
+
+  // ---- ideas of the second analogue (QuickNote AI): all notes, found word lit in the note, modified time, focus mode
+  await page.locator(".all-row").click();
+  await sleep(500);
+  const allNames = await page.locator(".notes-list .note-name").allInnerTexts();
+  check("'Все заметки' lists the notes of every project", (await page.locator(".section-label h2").first().innerText()).trim() === "Все заметки" && allNames.includes("Договор") && allNames.includes("Цель"), JSON.stringify(allNames.slice(0, 5)));
+  check("the bottom line says when the note was changed", /Изменено/.test(await page.locator(".statusbar").innerText()), (await page.locator(".statusbar").innerText()).replace(/\s+/g, " ").slice(0, 100));
+  await page.getByRole("button", { name: "Поиск заметок и команд" }).click();
+  await page.locator("#global-search").fill("договора");
+  await page.locator(".search-result").first().waitFor({ timeout: 5000 });
+  await page.locator(".search-result", { hasText: "Договор" }).first().click();
+  await sleep(900);
+  check("a note opened from the search shows the found word lit up (find bar prefilled)", (await page.locator(".find-bar .find-input").inputValue().catch(() => "")) === "договора" && /из \d+/.test(await page.locator(".find-count").innerText()), await page.locator(".find-count").innerText().catch(() => "none"));
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("F11");
+  await sleep(400);
+  check("F11 turns on the focus mode: panels hidden, editor stays", (await page.locator(".app-shell.is-focus").count()) === 1 && !(await page.locator(".sidebar").isVisible()) && !(await page.locator(".topbar").isVisible()) && (await page.locator(".bn-editor").first().isVisible()));
+  if (process.env.NH_SHOT) await page.screenshot({ path: process.env.NH_SHOT.replace(".png", "-focus.png") });
+  await page.getByRole("button", { name: /Выйти из режима фокуса/ }).click();
+  await sleep(300);
+  check("the exit button brings the panels back", (await page.locator(".app-shell.is-focus").count()) === 0 && (await page.locator(".sidebar").isVisible()));
 } catch (e) {
   check("scenario completed without exceptions", false, String(e.message ?? e).split("\n").slice(0, 5).join(" | "));
 } finally {

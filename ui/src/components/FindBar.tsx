@@ -15,8 +15,8 @@ export type FindHost = {
   off: (event: "transaction", cb: () => void) => void;
 };
 
-export function FindBar({ host, withReplace, onClose, onToggleReplace }: { host: FindHost; withReplace: boolean; onClose: () => void; onToggleReplace: () => void }) {
-  const [term, setTerm] = useState("");
+export function FindBar({ host, withReplace, initialTerm, onClose, onToggleReplace }: { host: FindHost; withReplace: boolean; initialTerm?: string; onClose: () => void; onToggleReplace: () => void }) {
+  const [term, setTerm] = useState(initialTerm ?? "");
   const [replacement, setReplacement] = useState("");
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [wholeWord, setWholeWord] = useState(false);
@@ -28,8 +28,8 @@ export function FindBar({ host, withReplace, onClose, onToggleReplace }: { host:
   useEffect(() => {
     const refresh = () => setTick((n) => n + 1);
     host.on("transaction", refresh);
-    inputRef.current?.focus();
-    inputRef.current?.select();
+    if (initialTerm) (host.commands as unknown as Record<string, (a?: unknown) => boolean>).setSearchTerm(initialTerm);
+    else { inputRef.current?.focus(); inputRef.current?.select(); }
     return () => {
       host.off("transaction", refresh);
       (host.commands as unknown as Record<string, () => boolean>).clearSearch();

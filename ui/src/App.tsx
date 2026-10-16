@@ -334,13 +334,14 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   }, [docs]);
   const [query, setQuery] = useState("");
   const [folder, setFolder] = useState(initialState.folder);
-  const [noteView, setNoteView] = useState<"folder" | "pinned" | "recent" | "archive" | "trash">("folder");
+  const [noteView, setNoteView] = useState<"folder" | "all" | "pinned" | "recent" | "archive" | "trash">("folder");
   const [folders, setFolders] = useState(initialState.folders);
   const [parents, setParents] = useState<Record<string, string>>(initial.parents);
   const [closedProjects, setClosedProjects] = useState<string[]>(() => { try { const v = JSON.parse(window.localStorage.getItem("nh4-closed-projects") ?? "[]") as unknown; return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []; } catch { return []; } });
   const [subNotes, setSubNotes] = useState(() => { try { return window.localStorage.getItem("nh4-sub-notes") !== "0"; } catch { return true; } });
   const [dense, setDense] = useState(() => { try { return window.localStorage.getItem("nh4-dense") === "1"; } catch { return false; } });
   useEffect(() => { try { window.localStorage.setItem("nh4-closed-projects", JSON.stringify(closedProjects)); window.localStorage.setItem("nh4-sub-notes", subNotes ? "1" : "0"); window.localStorage.setItem("nh4-dense", dense ? "1" : "0"); } catch { /* optional */ } }, [closedProjects, subNotes, dense]);
+  const [focusMode, setFocusMode] = useState(false);
   const [dragProject, setDragProject] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dark, setDark] = useState(initialState.dark);
@@ -350,7 +351,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const [zoom, setZoom] = useState(() => { try { const v = Number(localStorage.getItem("nh4-zoom")); return v >= 70 && v <= 200 ? v : 100; } catch { return 100; } });
   useEffect(() => { try { localStorage.setItem("nh4-zoom", String(zoom)); } catch { /* storage may be unavailable */ } }, [zoom]);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
-  const [find, setFind] = useState<null | { replace: boolean }>(null);
+  const [find, setFind] = useState<null | { replace: boolean; term?: string }>(null);
+  const pendingFindRef = useRef("");
   const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
   const [formDialog, setFormDialog] = useState<FormDialog>(null);
   const [notice, setNotice] = useState("");
@@ -468,6 +470,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     if (noteView === "archive") return Boolean(doc.archived);
     if (noteView === "pinned") return Boolean(doc.pinned);
     if (noteView === "recent") return typeof doc.lastOpenedAt === "number" && !doc.archived;
+    if (noteView === "all" && dayFilter === null) return !doc.archived;
     if (dayFilter !== null) { const t = doc.modifiedAt ?? 0; return !doc.archived && t >= dayFilter && t < dayFilter + DAY_MS; }
     return !doc.archived && folderScope.has(doc.folder);
   }).sort((left, right) => noteView === "recent" || noteView === "pinned"
@@ -478,7 +481,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const listNow = Date.now();
   const listDocs = noteView === "recent" || noteView === "pinned" ? filteredDocs
     : [...filteredDocs].sort((a, b) => notesSort === "title" ? a.title.localeCompare(b.title, "ru") : (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0));
-  const pinnedFirst = noteView === "folder" && dayFilter === null && listDocs.some((doc) => doc.pinned);
+  const pinnedFirst = (noteView === "folder" || noteView === "all") && dayFilter === null && listDocs.some((doc) => doc.pinned);
   const listGroups: Array<{ name: string; items: DocItem[] }> = notesSort === "modified" && noteView !== "recent" && noteView !== "pinned"
     ? [...(pinnedFirst ? [{ name: "Закреплённые", items: listDocs.filter((doc) => doc.pinned) }] : []),
         ...NOTE_GROUPS.map((name) => ({ name, items: listDocs.filter((doc) => !(pinnedFirst && doc.pinned) && dateGroup(doc.modifiedAt, listNow) === name) })).filter((group) => group.items.length > 0)]
@@ -864,13 +867,15 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     setFormDialog({ kind: "move", title: `Переместить «${activeDoc.title}»`, value: activeDoc.folder, hint: `Доступные проекты: ${folders.join(", ")}` });
   }, [activeDoc, activeId, folders]);
 
-  const switchToSpecialView = useCallback((view: "pinned" | "recent" | "archive" | "trash") => {
+  const switchToSpecialView = useCallback((view: "all" | "pinned" | "recent" | "archive" | "trash") => {
     setNoteView(view);
     setRailMenu(null);
     setSidebarCollapsed(window.matchMedia("(max-width: 760px)").matches);
     if (view === "trash") { setTrashPane(true); return; }   // the trash is a list in the main area; no note is opened behind it
     setTrashPane(false);
-    const firstNote = (view === "pinned"
+    const firstNote = (view === "all"
+      ? docs.filter((doc) => !doc.deletedAt && !doc.archived).sort((a, b) => (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0))
+      : view === "pinned"
       ? docs.filter((doc) => doc.pinned && !doc.deletedAt)
       : view === "recent"
         ? docs.filter((doc) => typeof doc.lastOpenedAt === "number" && !doc.deletedAt && !doc.archived).sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0))
@@ -1691,6 +1696,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     { id: "properties", label: activeInspector === "properties" ? "Закрыть свойства" : "Открыть свойства", hint: "Свойства текущей заметки", keywords: "свойства метка папка", icon: ChevronDown, disabled: !activeDoc, run: () => setActiveInspector((current) => current === "properties" ? null : "properties") },
     { id: "rename", label: "Переименовать заметку", hint: "Изменить название", keywords: "переименовать название", icon: Pencil, disabled: !activeDoc, run: () => activeDoc && setFormDialog({ kind: "rename", title: "Переименовать заметку", value: activeDoc.title, hint: "Название заметки" }) },
     { id: "move", label: "Переместить заметку", hint: "Выбрать проект", keywords: "переместить папка проект", icon: FolderInput, disabled: !activeDoc, run: () => moveActiveNote() },
+    { id: "focus", label: "Режим фокуса", hint: "Скрыть панели и писать без отвлечений", keywords: "фокус zen без отвлечений полноэкранный", icon: Eye, shortcut: "F11", run: () => setFocusMode(true) },
     { id: "pin", label: activeDoc?.pinned ? "Открепить заметку" : "Закрепить заметку", hint: "Избранное", keywords: "закрепить открепить pin", icon: activeDoc?.pinned ? PinOff : Pin, disabled: !activeDoc || Boolean(activeDoc.deletedAt), run: () => togglePinActiveNote() },
     { id: "archive", label: activeDoc?.archived ? "Вернуть из архива" : "Переместить в архив", hint: "Изменить состояние заметки", keywords: "архив архивировать вернуть", icon: Archive, disabled: !activeDoc, run: () => archiveActiveNote() },
     { id: "trash", label: "Переместить в корзину", hint: "Можно восстановить позже", keywords: "корзина удалить", icon: Trash2, disabled: !activeDoc, run: () => deleteActiveNote() },
@@ -1761,7 +1767,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     setNotice(`Источник ${citation.marker}: ${citation.label}`);
   }, [editor]);
 
-  useEffect(() => { setFind(null); }, [activeId]);
+  useEffect(() => { const term = pendingFindRef.current; pendingFindRef.current = ""; setFind(term ? { replace: false, term } : null); }, [activeId]);
 
   const noteStats = useMemo(() => {
     // the visible text only: list marks, heading marks and blank lines are not counted
@@ -1903,6 +1909,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   }, [importTextFile]);
 
   const chooseSearchResult = useCallback((doc: DocItem) => {
+    const word = query.trim().split(/\s+/).find((w) => w.length >= 2 && !w.startsWith(">")) ?? "";
+    if (word && doc.id === activeIdRef.current) setFind({ replace: false, term: word }); else pendingFindRef.current = word;
     setNoteView(doc.archived ? "archive" : "folder");
     setFolder(doc.folder);
     selectDocument(doc);
@@ -1910,7 +1918,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     setQuery("");
     setSelectedSearchIndex(0);
     window.setTimeout(restoreSearchFocus, 0);
-  }, [restoreSearchFocus, selectDocument]);
+  }, [query, restoreSearchFocus, selectDocument]);
 
   // back and forward through the notes opened one after another (Alt + left / right)
   useEffect(() => {
@@ -2126,6 +2134,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
 
   useEffect(() => {
     const keyHandler = (event: KeyboardEvent) => {
+      if (event.key === "F11") { event.preventDefault(); setFocusMode((v) => !v); return; }
       if (event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) { event.preventDefault(); goHistoryRef.current(event.key === "ArrowLeft" ? -1 : 1); return; }
       const action = matchShortcut(event);
       if (!action) return;
@@ -2284,7 +2293,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     for (const doc of docs) if (!doc.deletedAt) for (const tag of parseTags(tags[doc.id])) counts.set(tag, (counts.get(tag) ?? 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "ru"));
   }, [docs, tags]);
-  const viewTitle = noteView === "folder" ? folder : noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : noteView === "pinned" ? "Закреплённые" : "Недавние";
+  const viewTitle = noteView === "folder" ? folder : noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : noteView === "pinned" ? "Закреплённые" : noteView === "all" ? "Все заметки" : "Недавние";
   const saveFailed = /не сохранен/i.test(savedAt);
   const saveState: "saved" | "saving" | "error" = saveFailed ? "error" : /^Сохраняем|^Сохраняется/.test(savedAt) ? "saving" : "saved";
   const noteTagList = activeDoc ? parseTags(tags[activeDoc.id]) : [];
@@ -2292,7 +2301,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const noteMenuClose = (event: React.MouseEvent<HTMLDivElement>) => { if ((event.target as HTMLElement).closest("button")) event.currentTarget.closest("details")?.removeAttribute("open"); };
 
   return (
-    <div className={`app-shell${dark ? " theme-dark" : ""}${activeInspector === "ai" ? " ai-open" : ""}`} style={{ "--ai-w": `${aiWidth}px` } as React.CSSProperties}>
+    <div className={`app-shell${focusMode ? " is-focus" : ""}${dark ? " theme-dark" : ""}${activeInspector === "ai" ? " ai-open" : ""}`} style={{ "--ai-w": `${aiWidth}px` } as React.CSSProperties}>
       <header className="topbar">
         <div className="tb-nav" role="group" aria-label="Навигация">
         <div className="brand-lockup"><div className="brand-mark"><FileText size={17} strokeWidth={2.1} /></div><span>Notepad Hub</span></div>
@@ -2351,6 +2360,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
                 <div className="note-toolbar-menu-divider" />
                 <button disabled={!activeDoc || !isHosted()} onClick={() => void openHistory()}><Clock3 size={14} />История версий…</button>
                 <button disabled={!activeDoc} onClick={() => setActiveInspector((current) => current === "properties" ? null : "properties")}><Info size={14} />Содержание и свойства</button>
+                <button onClick={() => setFocusMode(true)}><Eye size={14} />Режим фокуса<kbd className="menu-key">F11</kbd></button>
                 {canUndoAi && <button onClick={undoAcceptedAi}><RotateCcw size={14} />Отменить AI-изменение</button>}
                 <div className="note-toolbar-menu-divider" />
                 {activeDoc?.deletedAt ? <><button onClick={restoreActiveNote}><RotateCcw size={14} />Восстановить</button><button className="destructive-action" onClick={permanentlyDeleteActiveNote}><Trash2 size={14} />Удалить навсегда</button></> : <><button disabled={!activeDoc} onClick={duplicateActiveNote}><Copy size={14} />Создать копию</button><button disabled={!activeDoc} onClick={archiveActiveNote}><Archive size={14} />{activeDoc?.archived ? "Вернуть в проект" : "В архив"}</button><div className="note-toolbar-menu-divider" /><button disabled={!activeDoc} className="destructive-action" onClick={deleteActiveNote}><Trash2 size={14} />В корзину</button></>}
@@ -2366,6 +2376,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
           <section className={`nav-section projects-section${dragProject ? " is-dragging" : ""}${dropTarget === "" ? " is-drop-root" : ""}`} aria-labelledby="projects-heading"
             onDragOver={(event) => { if (dragProject) { event.preventDefault(); setDropTarget(""); } }}
             onDrop={(event) => { if (dragProject) { event.preventDefault(); moveProjectTo(dragProject, ""); setDragProject(null); setDropTarget(null); } }}>
+            <div className="folder-item"><span className="folder-fold-gap" aria-hidden="true" /><button className={`folder-row all-row${noteView === "all" ? " selected" : ""}`} aria-current={noteView === "all" ? "page" : undefined} onClick={() => switchToSpecialView("all")}><FileText size={16} className="folder-icon" /><span>Все заметки</span><span className="folder-count">{docs.filter((doc) => !doc.deletedAt && !doc.archived).length}</span></button></div>
             {projectRows(folders, parents, closedProjects).map(({ name, depth, hasChildren }) => {
               const system = SYSTEM_PROJECTS.includes(name);
               const scope = subNotes ? projectScope(name, parents) : new Set([name]);
@@ -2386,7 +2397,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
             })}
           </section>
           <section className="nav-section notes-section" aria-label="Заметки раздела">
-            <div className="section-label"><h2>{noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : noteView === "pinned" ? "Избранное" : noteView === "recent" ? "Недавние" : "Заметки"}</h2><span className="notes-tools">{dayFilter !== null && <button type="button" className="day-chip" title="Показать все заметки проекта" onClick={() => setDayFilter(null)}>{new Date(dayFilter).getDate()} {MONTHS_GEN[new Date(dayFilter).getMonth()]} <X size={11} aria-hidden="true" /></button>}{listGroups.some((g) => g.name) && <button type="button" className="icon-button tiny" aria-label="Свернуть или развернуть все группы" title="Свернуть или развернуть все группы" onClick={() => setClosedGroups((current) => current.length > 0 ? [] : listGroups.map((g) => g.name).filter(Boolean))}><ChevronsUpDown size={14} /></button>}<button type="button" className={`icon-button tiny${dayFilter !== null || calendarOpen ? " is-on" : ""}`} aria-label="Календарь: заметки по дням" aria-expanded={calendarOpen} title="Календарь: заметки по дням" onClick={() => setCalendarOpen((open) => !open)}><CalendarDays size={14} /></button><button type="button" className="icon-button tiny" aria-label={notesSort === "modified" ? "Сортировка: по изменению. Нажмите, чтобы сортировать по названию" : "Сортировка: по названию. Нажмите, чтобы сортировать по изменению"} title={notesSort === "modified" ? "Сначала изменённые: нажмите для сортировки по названию" : "По названию: нажмите для сортировки по изменению"} onClick={() => { const next = notesSort === "modified" ? "title" : "modified"; setNotesSort(next); try { window.localStorage.setItem("nh4-notes-sort", next); } catch { /* optional */ } }}><ArrowUpDown size={14} /></button><button type="button" className={`icon-button tiny${notesPreview ? " is-on" : ""}`} aria-pressed={notesPreview} aria-label="Показывать начало текста под названием" title="Начало текста под названием" onClick={() => { const next = !notesPreview; setNotesPreview(next); try { window.localStorage.setItem("nh4-notes-preview", next ? "1" : "0"); } catch { /* optional */ } }}><AlignLeft size={14} /></button><span className="notes-count">{filteredDocs.length}</span></span></div>
+            <div className="section-label"><h2>{noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : noteView === "pinned" ? "Избранное" : noteView === "recent" ? "Недавние" : noteView === "all" ? "Все заметки" : "Заметки"}</h2><span className="notes-tools">{dayFilter !== null && <button type="button" className="day-chip" title="Показать все заметки проекта" onClick={() => setDayFilter(null)}>{new Date(dayFilter).getDate()} {MONTHS_GEN[new Date(dayFilter).getMonth()]} <X size={11} aria-hidden="true" /></button>}{listGroups.some((g) => g.name) && <button type="button" className="icon-button tiny" aria-label="Свернуть или развернуть все группы" title="Свернуть или развернуть все группы" onClick={() => setClosedGroups((current) => current.length > 0 ? [] : listGroups.map((g) => g.name).filter(Boolean))}><ChevronsUpDown size={14} /></button>}<button type="button" className={`icon-button tiny${dayFilter !== null || calendarOpen ? " is-on" : ""}`} aria-label="Календарь: заметки по дням" aria-expanded={calendarOpen} title="Календарь: заметки по дням" onClick={() => setCalendarOpen((open) => !open)}><CalendarDays size={14} /></button><button type="button" className="icon-button tiny" aria-label={notesSort === "modified" ? "Сортировка: по изменению. Нажмите, чтобы сортировать по названию" : "Сортировка: по названию. Нажмите, чтобы сортировать по изменению"} title={notesSort === "modified" ? "Сначала изменённые: нажмите для сортировки по названию" : "По названию: нажмите для сортировки по изменению"} onClick={() => { const next = notesSort === "modified" ? "title" : "modified"; setNotesSort(next); try { window.localStorage.setItem("nh4-notes-sort", next); } catch { /* optional */ } }}><ArrowUpDown size={14} /></button><button type="button" className={`icon-button tiny${notesPreview ? " is-on" : ""}`} aria-pressed={notesPreview} aria-label="Показывать начало текста под названием" title="Начало текста под названием" onClick={() => { const next = !notesPreview; setNotesPreview(next); try { window.localStorage.setItem("nh4-notes-preview", next ? "1" : "0"); } catch { /* optional */ } }}><AlignLeft size={14} /></button><span className="notes-count">{filteredDocs.length}</span></span></div>
             <ul className="notes-list">
               {listGroups.map((group) => <Fragment key={group.name || "all"}>
                 {group.name && <li className="notes-group"><button type="button" aria-expanded={!closedGroups.includes(group.name)} onClick={() => setClosedGroups((current) => current.includes(group.name) ? current.filter((x) => x !== group.name) : [...current, group.name])}><ChevronDown size={13} className="notes-group-chevron" aria-hidden="true" />{group.name}<small>{group.items.length}</small></button></li>}
@@ -2472,6 +2483,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         </div></div>}
 
         <main className="main-panel">
+          {focusMode && <button type="button" className="focus-exit" onClick={() => setFocusMode(false)} title="Вернуть панели (F11)"><X size={14} aria-hidden="true" />Выйти из режима фокуса</button>}
           <div className="document-tabs">
             {tabsEdge.overflow && <button type="button" className="tabs-arrow" aria-label="Прокрутить вкладки влево" title="Влево" disabled={!tabsEdge.left} onClick={() => tabsScrollerRef.current?.scrollBy({ left: -280, behavior: "smooth" })}><ChevronLeft size={16} /></button>}
             <div className="tabs-scroller" ref={tabsScrollerRef}>
@@ -2502,7 +2514,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
           </div>}
           <div id="editor-workspace-panel" className={`editor-scroll${secondId ? " is-split" : ""}`} hidden={!activeDoc || trashPane} role="tabpanel" aria-label={activeDoc ? undefined : "Редактор заметки"} aria-labelledby={activeDoc ? `note-tab-${activeDoc.id}` : undefined} tabIndex={0}>
             <div className="editor-column">
-              {find && <FindBar host={editor._tiptapEditor as unknown as FindHost} withReplace={find.replace} onClose={() => { setFind(null); editor.focus(); }} onToggleReplace={() => setFind((c) => c && ({ replace: !c.replace }))} />}
+              {find && <FindBar host={editor._tiptapEditor as unknown as FindHost} initialTerm={find.term} withReplace={find.replace} onClose={() => { setFind(null); editor.focus(); }} onToggleReplace={() => setFind((c) => c && ({ replace: !c.replace }))} />}
               <div className="editor-card" style={{ "--editor-zoom": zoom / 100 } as React.CSSProperties} onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={(e) => void handleDrop(e)}><BlockNoteView editor={editor} theme={dark ? "dark" : "light"} onChange={handleEditorChange} slashMenu sideMenu={false} /></div>
               {activeDoc && (() => {
                 const outgoing = linkIndex.outgoing(activeDoc.id);
@@ -2526,6 +2538,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
           <footer className="statusbar" aria-label="Служебная строка">
             <div className="status-left">
               <span className={`status-save is-${saveState}`} role="status" aria-live="polite" title={savedAt}>{saveState === "saved" ? <Check size={14} aria-hidden="true" /> : saveState === "saving" ? <LoaderCircle size={14} className="ai-spinner" aria-hidden="true" /> : <CircleAlert size={14} aria-hidden="true" />}{saveState === "saved" ? "Сохранено" : saveState === "saving" ? "Сохраняется…" : "Не сохранено"}{saveState === "error" && <small>{savedAt.replace(/^Не сохранено:?\s*/i, "").slice(0, 70)}</small>}</span>
+              {activeDoc?.modifiedAt && <><span className="status-divider" aria-hidden="true">·</span><span className="status-modified" title="Когда заметку изменили в последний раз">Изменено {new Date(activeDoc.modifiedAt).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span></>}
               {activeDoc && backlinkCount > 0 && <><span className="status-divider" aria-hidden="true">·</span><button className="status-links" title="Заметки, которые ссылаются на эту: показать" onClick={() => { const panel = document.querySelector<HTMLDetailsElement>(".links-panel"); if (panel) { panel.open = true; panel.scrollIntoView({ block: "center", behavior: "smooth" }); } }}><Link2 size={13} aria-hidden="true" />Обратных ссылок: {backlinkCount}</button></>}
               {activeDoc && <><span className="status-divider" aria-hidden="true">·</span>
               <button className="status-tags" title="Метки заметки: изменить" onClick={() => setFormDialog({ kind: "tag", title: "Метки заметки", value: tags[activeDoc.id] ?? "", hint: "Метки через запятую" })}><Hash size={13} aria-hidden="true" />{noteTagList.length > 0 ? noteTagList.map((tag) => <span key={tag} className="status-tag">{tag}</span>) : <span className="status-tags-empty">добавить метки</span>}</button></>}
