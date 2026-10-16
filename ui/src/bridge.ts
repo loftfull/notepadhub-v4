@@ -9,7 +9,7 @@ export type HostNote = {
   id: string; title: string; projectId: string; tags: string;
   createdUtc: string; updatedUtc: string; lastOpenedUtc: string;
   isPinned: boolean; isArchived: boolean; isDeleted: boolean; externalOnly: boolean;
-  legacySourceGuid: string; sourcePath: string; sourceType: string; contentType: string; writeThrough?: boolean;
+  legacySourceGuid: string; sourcePath: string; sourceType: string; contentType: string; writeThrough?: boolean; isProtected?: boolean; locked?: boolean;
   content: string; blocksJson: string | null;
 };
 export type HostSettings = { activeProjectId: string; selectedNoteId: string; theme: "system" | "light" | "dark"; sidebarVisible: boolean };
@@ -162,6 +162,10 @@ export const host = {
   listHistory: (id: string) => call<HistoryEntry[]>("listHistory", { id }),
   readHistory: (id: string, name: string) => call<string>("readHistory", { id, name }),
   importWindowsSnapshot: () => call<ImportSummary>("importWindowsSnapshot"),
+  setPassword: (id: string, password: string) => call<{ id: string; updatedUtc: string }>("setPassword", { id, password }),
+  unlockNote: (id: string, password: string) => call<Record<string, never>>("unlockNote", { id, password }),
+  removePassword: (id: string, password: string) => call<{ id: string; updatedUtc: string }>("removePassword", { id, password }),
+  relockNotes: (id?: string) => call<Record<string, never>>("relockNotes", { id: id ?? null }),
   setWriteThrough: (id: string, enabled: boolean) => call<{ id: string; enabled: boolean }>("setWriteThrough", { id, enabled }),
   resolveSourceConflict: (id: string, choice: "mine" | "disk") => call<{ id: string; updatedUtc: string }>("resolveSourceConflict", { id, choice }),
   saveAsset: (data: string) => call<{ file: string }>("saveAsset", { data }),

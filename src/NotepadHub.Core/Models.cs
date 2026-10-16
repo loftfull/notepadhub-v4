@@ -34,6 +34,10 @@ public sealed class NoteMeta
     public bool IsArchived { get; set; }
     public bool IsDeleted { get; set; }
     public bool ExternalOnly { get; set; }
+    /// <summary>The note has a password: its text, blocks and history are stored encrypted (AES-256-GCM). 3.0.x ignores these properties.</summary>
+    public bool IsProtected { get; set; }
+    public string LockSalt { get; set; } = "";
+    public string LockCheck { get; set; } = "";
 
     public NoteMeta Clone() => (NoteMeta)MemberwiseClone();
 }
@@ -65,6 +69,8 @@ public sealed class NoteDocument
     /// <summary>Raw JSON array of BlockNote blocks, or null when absent/stale (text changed outside v4 → UI rebuilds from Content).</summary>
     public string? BlocksJson { get; set; }
     public bool ExternalOnly { get; set; }
+    /// <summary>The note has a password and was not unlocked in this session: Content and BlocksJson stay empty.</summary>
+    public bool Locked { get; set; }
 }
 
 public sealed class HistoryEntry

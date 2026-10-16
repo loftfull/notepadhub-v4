@@ -7,6 +7,7 @@ import { META_INSTRUCTION, parseMetaAnswer, suggestTags, suggestTitle } from "./
 import { INSIGHTS_HEADING, MAX_INSTRUCTION, TRANSFORMATIONS, insightMarkdown, loadCustom, saveCustom, type Transformation } from "./transformations";
 import { TransformationsDialog } from "./components/TransformationsDialog";
 import { TrashView } from "./components/TrashView";
+import { LockScreen, PasswordDialog } from "./components/PasswordParts";
 import { parseAiAnalysis } from "./aiAnalysis";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BlockNoteView } from "@blocknote/mantine";
@@ -16,7 +17,7 @@ import type { PartialBlock } from "@blocknote/core";
 import {
   AlignLeft, Archive, CalendarDays, ChevronsUpDown, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpDown, ExternalLink, Link2, Replace, ChevronLeft, ChevronRight, CircleAlert, Minus, Settings, Star, Check, ChevronDown, Clock3, Command, Copy, Download, FileText,
   Folder, FolderInput, FolderOpen, Hash, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Columns2, ImagePlus, LoaderCircle, Redo2, Tag, Wand2, RotateCcw, Search, Undo2,
-  Sparkles, Sun, Trash2, X, Eye, Pin, PinOff, List, Ellipsis, Info, FolderPlus, Printer, CalendarClock, ListOrdered, Type, WrapText,
+  Sparkles, Sun, Trash2, X, Eye, Pin, PinOff, List, Ellipsis, Info, FolderPlus, Lock, Printer, CalendarClock, ListOrdered, Type, WrapText,
 } from "lucide-react";
 import { getAiModels, getAiProviders, streamAiTask, type HiddenModel, type AiCitation, type AiModelOption, type AiOperation, type AiProposal, type AiProvider, type AiProviderStatus, type AiScope } from "./ai";
 import { AiAssistantPanel } from "./components/AiAssistantPanel";
@@ -349,6 +350,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const [dense, setDense] = useState(() => { try { return window.localStorage.getItem("nh4-dense") === "1"; } catch { return false; } });
   useEffect(() => { try { window.localStorage.setItem("nh4-closed-projects", JSON.stringify(closedProjects)); window.localStorage.setItem("nh4-sub-notes", subNotes ? "1" : "0"); window.localStorage.setItem("nh4-dense", dense ? "1" : "0"); } catch { /* optional */ } }, [closedProjects, subNotes, dense]);
   const [focusMode, setFocusMode] = useState(false);
+  const [pwDialog, setPwDialog] = useState<null | { kind: "set" | "remove"; id: string; title: string }>(null);
+  const lastActivityRef = useRef(Date.now());
   const [picked, setPicked] = useState<string[]>([]);          // several notes chosen in the list (Ctrl or Shift + click)
   const [dragNotes, setDragNotes] = useState<string[]>([]);    // the notes being dragged to a project
   const anchorRef = useRef<string | null>(null);
@@ -765,7 +768,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     activeIdRef.current = doc.id;
     setActiveId(doc.id);
     setDocs((current) => current.map((item) => item.id === doc.id ? { ...item, lastOpenedAt: Date.now() } : item));
-    editor.replaceBlocks(editor.document, contents[doc.id] ?? sampleContent(doc.title));
+    editor.replaceBlocks(editor.document, doc.locked ? [{ type: "paragraph", content: "" }] : (contents[doc.id] ?? sampleContent(doc.title)));
     setSavedAt("Сохраняем локально…");
   }, [contents, editor]);
 
@@ -1727,6 +1730,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     { id: "goto", label: "Перейти к строке", hint: "По номеру строки", keywords: "строка перейти ctrl g", icon: ListOrdered, shortcut: "Ctrl+G", disabled: !activeDoc, run: () => goToLine() },
     { id: "print", label: "Печать", hint: "Распечатать заметку", keywords: "печать принтер ctrl p print pdf", icon: Printer, shortcut: "Ctrl+P", disabled: !activeDoc, run: () => printNote() },
     { id: "savetxt", label: "Сохранить как текстовый файл", hint: "Файл .txt", keywords: "сохранить как txt текст экспорт", icon: ArrowDownToLine, disabled: !activeDoc, run: () => exportText() },
+    { id: "lockall", label: "Заблокировать защищённые заметки", hint: "Забыть пароли в этой сессии", keywords: "заблокировать пароль закрыть защита", icon: Lock, disabled: !docs.some((d) => d.protected && !d.locked && !d.deletedAt), run: () => void relockNotes() },
+    { id: "setpw", label: "Защитить заметку паролем", hint: "Зашифровать текст заметки", keywords: "пароль защита шифр", icon: Lock, disabled: !activeDoc || Boolean(activeDoc.protected || activeDoc.writeThrough || activeDoc.readOnly) || !isHosted(), run: () => activeDoc && setPwDialog({ kind: "set", id: activeDoc.id, title: `«${activeDoc.title}»` }) },
     { id: "focus", label: "Режим фокуса", hint: "Скрыть панели и писать без отвлечений", keywords: "фокус zen без отвлечений полноэкранный", icon: Eye, shortcut: "F11", run: () => setFocusMode(true) },
     { id: "pin", label: activeDoc?.pinned ? "Открепить заметку" : "Закрепить заметку", hint: "Избранное", keywords: "закрепить открепить pin", icon: activeDoc?.pinned ? PinOff : Pin, disabled: !activeDoc || Boolean(activeDoc.deletedAt), run: () => togglePinActiveNote() },
     { id: "archive", label: activeDoc?.archived ? "Вернуть из архива" : "Переместить в архив", hint: "Изменить состояние заметки", keywords: "архив архивировать вернуть", icon: Archive, disabled: !activeDoc, run: () => archiveActiveNote() },
@@ -1811,6 +1816,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const handleEditorChange = useCallback(() => {
     const id = activeIdRef.current;
     if (!id) return;
+    if (docsRef.current.find((doc) => doc.id === id)?.locked) return;   // the cover of a locked note is not content
     const blocks = editor.document;
     if (aiProposal?.operation === "analyze" && aiProposal.noteId === id
       && aiProposal.sourceFingerprint !== JSON.stringify({ noteId: id, blocks })) {
@@ -2406,6 +2412,34 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
       setToastAction({ label: "Отменить", run: () => setDocs((current) => current.map((doc) => set.has(doc.id) ? { ...doc, deletedAt: undefined } : doc)) });
     } });
   };
+  const passwordProblem = (error: unknown) => error instanceof Error ? error.message : "Не получилось";
+  const refreshAfterPassword = async (id: string, message: string) => { await reloadLibrary({ selectId: id }); setNotice(message); };
+  const setNotePassword = async (id: string, password: string): Promise<string | null> => {
+    try { await sync.flush(); await host.setPassword(id, password); await refreshAfterPassword(id, "Пароль поставлен. Текст заметки зашифрован"); return null; } catch (error) { return passwordProblem(error); }
+  };
+  const removeNotePassword = async (id: string, password: string): Promise<string | null> => {
+    try { await sync.flush(); await host.removePassword(id, password); await refreshAfterPassword(id, "Пароль снят"); return null; } catch (error) { return passwordProblem(error); }
+  };
+  const unlockNote = async (id: string, password: string): Promise<string | null> => {
+    try { await host.unlockNote(id, password); await refreshAfterPassword(id, "Заметка открыта"); return null; } catch (error) { return passwordProblem(error); }
+  };
+  const relockNotes = async (id?: string) => {
+    try { await sync.flush(); await host.relockNotes(id); await reloadLibrary({ selectId: activeIdRef.current ?? undefined }); setNotice(id ? "Заметка заблокирована" : "Защищённые заметки заблокированы"); } catch (error) { setNotice(passwordProblem(error)); }
+  };
+  const relockNotesRef = useRef(relockNotes);
+  relockNotesRef.current = relockNotes;
+  const hasOpenProtected = docs.some((doc) => doc.protected && !doc.locked && !doc.deletedAt);
+  // idle for 15 minutes: the keys are forgotten and the protected notes close
+  useEffect(() => {
+    const touch = () => { lastActivityRef.current = Date.now(); };
+    window.addEventListener("pointerdown", touch); window.addEventListener("keydown", touch);
+    return () => { window.removeEventListener("pointerdown", touch); window.removeEventListener("keydown", touch); };
+  }, []);
+  useEffect(() => {
+    if (!hasOpenProtected) return;
+    const timer = window.setInterval(() => { if (Date.now() - lastActivityRef.current > 15 * 60_000) { lastActivityRef.current = Date.now(); void relockNotesRef.current(); } }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [hasOpenProtected]);
   const toggleCompare = () => {
     if (secondId) { setSecondId(null); return; }
     const other = [...openTabs.filter((doc) => doc.id !== activeId), ...docs.filter((doc) => !doc.deletedAt && doc.id !== activeId)].find((doc) => !isPlaceholderNote(doc.id));
@@ -2464,6 +2498,8 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
                 <button disabled={!activeDoc} onClick={() => setFind({ replace: true })}><Replace size={14} />Заменить…<kbd className="menu-key">Ctrl+H</kbd></button>
                 <div className="note-toolbar-menu-divider" />
                 <button disabled={!activeDoc} onClick={copyNoteLink}><Link2 size={14} />Копировать ссылку на заметку</button>
+                {activeDoc && !activeDoc.protected && isHosted() && <button disabled={Boolean(activeDoc.deletedAt || activeDoc.readOnly || activeDoc.writeThrough)} title={activeDoc.writeThrough ? "Заметка сохраняется в файл на диске: пароль на неё поставить нельзя" : undefined} onClick={() => setPwDialog({ kind: "set", id: activeDoc.id, title: `«${activeDoc.title}»` })}><Lock size={14} />Защитить паролем…</button>}
+                {activeDoc?.protected && !activeDoc.locked && <><button onClick={() => void relockNotes(activeDoc.id)}><Lock size={14} />Заблокировать сейчас</button><button onClick={() => setPwDialog({ kind: "remove", id: activeDoc.id, title: `«${activeDoc.title}»` })}><Lock size={14} />Снять пароль…</button></>}
                 {isHosted() && <button disabled={!activeDoc} onClick={() => void revealNote()}><ExternalLink size={14} />Показать в Проводнике</button>}
                 {activeDoc?.sourcePath && isHosted() && <button onClick={() => void toggleWriteThrough()} title={activeDoc.sourcePath}><FileText size={14} />{activeDoc.writeThrough ? "Не сохранять в файл" : "Сохранять в файл"}<small className="menu-hint">{activeDoc.sourcePath.split(/[\\/]/).pop()}</small></button>}
                 <button disabled={!activeDoc} onClick={exportText}><ArrowDownToLine size={14} />Сохранить как текст (.txt)</button>
@@ -2522,7 +2558,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
             <ul className="notes-list">
               {listGroups.map((group) => <Fragment key={group.name || "all"}>
                 {group.name && <li className="notes-group"><button type="button" aria-expanded={!closedGroups.includes(group.name)} onClick={() => setClosedGroups((current) => current.includes(group.name) ? current.filter((x) => x !== group.name) : [...current, group.name])}><ChevronDown size={13} className="notes-group-chevron" aria-hidden="true" />{group.name}<small>{group.items.length}</small></button></li>}
-                {!closedGroups.includes(group.name) && group.items.map((doc) => <li key={doc.id}><button className={`${doc.id === activeId ? "is-current" : ""}${picked.includes(doc.id) ? " is-picked" : ""}`.trim() || undefined} aria-current={doc.id === activeId ? "true" : undefined} aria-selected={picked.includes(doc.id) || undefined} title={doc.title} draggable={!doc.deletedAt} onDragStart={(event) => { const ids = picked.includes(doc.id) ? picked : [doc.id]; event.dataTransfer.setData("text/plain", ids.join(",")); event.dataTransfer.effectAllowed = "move"; setDragNotes(ids); }} onDragEnd={() => { setDragNotes([]); setDropTarget(null); }} onClick={(event) => pickNote(doc, event)}><FileText size={14} aria-hidden="true" /><span className="note-line"><span className="note-name">{doc.title}</span>{notesPreview && snippetOf(doc) && <small className="note-snippet">{snippetOf(doc)}</small>}</span></button></li>)}
+                {!closedGroups.includes(group.name) && group.items.map((doc) => <li key={doc.id}><button className={`${doc.id === activeId ? "is-current" : ""}${picked.includes(doc.id) ? " is-picked" : ""}`.trim() || undefined} aria-current={doc.id === activeId ? "true" : undefined} aria-selected={picked.includes(doc.id) || undefined} title={doc.protected ? `${doc.title} (защищена паролем)` : doc.title} draggable={!doc.deletedAt} onDragStart={(event) => { const ids = picked.includes(doc.id) ? picked : [doc.id]; event.dataTransfer.setData("text/plain", ids.join(",")); event.dataTransfer.effectAllowed = "move"; setDragNotes(ids); }} onDragEnd={() => { setDragNotes([]); setDropTarget(null); }} onClick={(event) => pickNote(doc, event)}>{doc.protected ? <Lock size={14} aria-hidden="true" /> : <FileText size={14} aria-hidden="true" />}<span className="note-line"><span className="note-name">{doc.title}</span>{notesPreview && snippetOf(doc) && <small className="note-snippet">{snippetOf(doc)}</small>}</span></button></li>)}
               </Fragment>)}
               {filteredDocs.length === 0 && <li className="notes-empty">В этом разделе нет заметок</li>}
             </ul>
@@ -2617,7 +2653,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
             <div className="tabs-scroller" ref={tabsScrollerRef}>
               <div className="tab-list" role={openTabs.length > 0 ? "tablist" : undefined} aria-label={openTabs.length > 0 ? `Открытые заметки: ${viewTitle}` : undefined}>
               {openTabs.map((doc, index) => <div key={doc.id} className={`tab-wrap${doc.id === activeId ? " is-active" : ""}`} onContextMenu={(event) => { event.preventDefault(); setTabMenu({ x: event.clientX, y: event.clientY, id: doc.id }); }} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); void closeTab(doc.id); } }}>
-                <button id={`note-tab-${doc.id}`} data-tab-index={index} role="tab" aria-controls="editor-workspace-panel" aria-selected={doc.id === activeId} tabIndex={doc.id === activeId ? 0 : -1} className={`tab${doc.id === activeId ? " active-tab" : ""}`} title={`${doc.title} (Delete — в корзину, Ctrl+W — закрыть, правая кнопка — меню)`} onKeyDown={(event) => handleTabKeyDown(event, index)} onClick={() => selectDocument(doc)}>{doc.pinned && <Star size={11} className="tab-pin" aria-label="Закреплена" />}<span>{doc.title}</span></button>
+                <button id={`note-tab-${doc.id}`} data-tab-index={index} role="tab" aria-controls="editor-workspace-panel" aria-selected={doc.id === activeId} tabIndex={doc.id === activeId ? 0 : -1} className={`tab${doc.id === activeId ? " active-tab" : ""}`} title={`${doc.title} (Delete — в корзину, Ctrl+W — закрыть, правая кнопка — меню)`} onKeyDown={(event) => handleTabKeyDown(event, index)} onClick={() => selectDocument(doc)}>{doc.pinned && <Star size={11} className="tab-pin" aria-label="Закреплена" />}{doc.protected && <Lock size={11} className="tab-pin" aria-label="Защищена паролем" />}<span>{doc.title}</span></button>
                 <button className="tab-close" tabIndex={-1} aria-hidden="true" title="Закрыть вкладку (изменения сохранятся)" onClick={() => void closeTab(doc.id)}><X size={13} /></button>
               </div>)}
               </div>
@@ -2643,7 +2679,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
           <div id="editor-workspace-panel" className={`editor-scroll${secondId ? " is-split" : ""}`} hidden={!activeDoc || trashPane} role="tabpanel" aria-label={activeDoc ? undefined : "Редактор заметки"} aria-labelledby={activeDoc ? `note-tab-${activeDoc.id}` : undefined} tabIndex={0}>
             <div className="editor-column">
               {find && <FindBar host={editor._tiptapEditor as unknown as FindHost} initialTerm={find.term} withReplace={find.replace} onClose={() => { setFind(null); editor.focus(); }} onToggleReplace={() => setFind((c) => c && ({ replace: !c.replace }))} />}
-              <div className="editor-card" style={{ "--editor-zoom": zoom / 100 } as React.CSSProperties} onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={(e) => void handleDrop(e)}><BlockNoteView editor={editor} theme={dark ? "dark" : "light"} onChange={handleEditorChange} slashMenu sideMenu={false} /></div>
+              <div className="editor-card" style={{ "--editor-zoom": zoom / 100 } as React.CSSProperties} onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }} onDrop={(e) => void handleDrop(e)}>{activeDoc?.locked && <LockScreen key={activeDoc.id} title={activeDoc.title} onUnlock={(password) => unlockNote(activeDoc.id, password)} />}<BlockNoteView editor={editor} theme={dark ? "dark" : "light"} onChange={handleEditorChange} slashMenu sideMenu={false} /></div>
               {activeDoc && (() => {
                 const outgoing = linkIndex.outgoing(activeDoc.id);
                 const back = linkIndex.backlinks(activeDoc.id);
@@ -2773,6 +2809,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         <div role="listbox" aria-label="Заметки" className="link-picker-list">{pickerDocs.map((doc, index) => <button key={doc.id} role="option" aria-selected={index === linkPicker.index} className={index === linkPicker.index ? "is-current" : ""} onMouseEnter={() => setLinkPicker((c) => c && { ...c, index })} onClick={() => insertLink(doc.title)}><FileText size={14} /><span>{doc.title}</span><small>{doc.folder}</small></button>)}
           {pickerDocs.length === 0 && <p className="search-empty">{linkPicker.query.trim() ? "Такой заметки нет — Enter вставит ссылку на новую" : "Нет других заметок"}</p>}</div>
       </div></div>}
+      {pwDialog && <PasswordDialog kind={pwDialog.kind} title={pwDialog.title} onClose={() => setPwDialog(null)} onSubmit={(password) => pwDialog.kind === "set" ? setNotePassword(pwDialog.id, password) : removeNotePassword(pwDialog.id, password)} />}
       {formDialog && <div className="modal-backdrop form-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setFormDialog(null); }}><form className="form-modal" role="dialog" aria-modal="true" aria-labelledby="form-title" onSubmit={submitFormDialog}><div className="form-modal-heading"><div><h2 id="form-title">{formDialog.title}</h2><p>{formDialog.hint}</p></div><button type="button" className="icon-button" aria-label="Закрыть" onClick={() => setFormDialog(null)}><X size={18} /></button></div><input autoFocus value={formDialog.value} onChange={(event) => setFormDialog((current) => current ? { ...current, value: event.target.value } : current)} aria-label={formDialog.title} placeholder={formDialog.hint} /><div className="form-modal-actions"><button type="button" className="form-cancel" onClick={() => setFormDialog(null)}>Отмена</button><button type="submit" className="form-submit">Готово</button></div></form></div>}
       {refs && <div className="modal-backdrop form-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setRefs(null); }}><div className="form-modal history-modal" role="dialog" aria-modal="true" aria-labelledby="refs-title">
         <div className="form-modal-heading"><div><h2 id="refs-title">Подтянуть текст из внешних файлов</h2><p>Эти заметки пришли из Блокнота Windows без текста: он хранился в файлах на диске. Выберите, какие файлы прочитать.</p></div><button type="button" className="icon-button" aria-label="Закрыть" onClick={() => setRefs(null)}><X size={18} /></button></div>

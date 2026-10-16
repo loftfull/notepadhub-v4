@@ -7,6 +7,8 @@ export type DocItem = {
   modifiedAt?: number;
   /** set for huge files that live only on disk: shown, never overwritten */
   readOnly?: boolean;
+  /** the note has a password; `locked` = it was not unlocked in this session, the text is not in the page */
+  protected?: boolean; locked?: boolean;
   /** the note came from a file on disk; with writeThrough every edit is saved back into that file */
   sourcePath?: string; writeThrough?: boolean;
 };

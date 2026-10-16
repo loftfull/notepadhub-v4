@@ -34,7 +34,7 @@ public sealed record BridgeProject(string Id, string Name, int Order, bool IsSys
 public sealed record BridgeNote(
     string Id, string Title, string ProjectId, string Tags, string CreatedUtc, string UpdatedUtc, string LastOpenedUtc,
     bool IsPinned, bool IsArchived, bool IsDeleted, bool ExternalOnly, string LegacySourceGuid, string SourcePath, string SourceType,
-    string ContentType, string Content, string? BlocksJson, bool WriteThrough);
+    string ContentType, string Content, string? BlocksJson, bool WriteThrough, bool IsProtected, bool Locked);
 
 public sealed record BridgeSettings(string ActiveProjectId, string SelectedNoteId, string Theme, bool SidebarVisible);
 
@@ -170,6 +170,10 @@ public sealed class BridgeDispatcher
             }
             case "setWriteThrough": { var r = Read<WriteThroughRequest>(payload); RequireId(r.Id); _store.SetWriteThrough(r.Id, r.Enabled); return new { id = r.Id, enabled = r.Enabled }; }
             case "resolveSourceConflict": { var r = Read<ConflictRequest>(payload); RequireId(r.Id); var m = _store.ResolveSourceConflict(r.Id, r.Choice); return new { id = m.Id, updatedUtc = m.UpdatedUtc }; }
+            case "setPassword": { var r = Read<PasswordRequest>(payload); RequireId(r.Id); var m = _store.SetPassword(r.Id, r.Password); return new { id = m.Id, updatedUtc = m.UpdatedUtc }; }
+            case "unlockNote": { var r = Read<PasswordRequest>(payload); RequireId(r.Id); _store.UnlockNote(r.Id, r.Password); return new { }; }
+            case "removePassword": { var r = Read<PasswordRequest>(payload); RequireId(r.Id); var m = _store.RemovePassword(r.Id, r.Password); return new { id = m.Id, updatedUtc = m.UpdatedUtc }; }
+            case "relockNotes": _store.RelockNotes(Read<OptionalIdRequest>(payload).Id); return new { };
             case "checkpoint": _store.Checkpoint(Read<IdRequest>(payload).Id); return new { };
             case "createBackup": return CreateBackup();
             case "restoreBackup": return RestoreBackup();
@@ -201,7 +205,7 @@ public sealed class BridgeDispatcher
                 external = true;
             }
             return new BridgeNote(m.Id, m.Title, m.ProjectId, m.Tags, m.CreatedUtc, m.UpdatedUtc, m.LastOpenedUtc, m.IsPinned, m.IsArchived, m.IsDeleted,
-                external, m.LegacySourceGuid, m.SourcePath, m.SourceType, m.ContentType, content, blocks, _store.IsWriteThrough(m.Id));
+                external, m.LegacySourceGuid, m.SourcePath, m.SourceType, m.ContentType, content, blocks, _store.IsWriteThrough(m.Id), m.IsProtected, m.IsProtected && !_store.IsUnlocked(m.Id));
         }).ToList();
         var s = _store.Settings;
         return new
@@ -279,6 +283,8 @@ public sealed class BridgeDispatcher
     }
 
     // ---- request shapes (camelCase from the page)
+    private sealed class PasswordRequest { public string Id { get; set; } = ""; public string Password { get; set; } = ""; }
+    private sealed class OptionalIdRequest { public string? Id { get; set; } }
     private sealed class NameRequest { public string Name { get; set; } = ""; public string? ParentId { get; set; } }
     private sealed class MoveProjectRequest { public string Id { get; set; } = ""; public string? ParentId { get; set; } }
     private sealed class RenameRequest { public string Id { get; set; } = ""; public string Name { get; set; } = ""; }

@@ -14,7 +14,7 @@ namespace NotepadHub.Core;
 /// derived from. If the .txt no longer matches that hash (for example 3.0.5 edited it), the blocks are treated as
 /// stale and the UI rebuilds them from the text, so the two generations can never silently fork a note.
 /// </summary>
-public sealed class NoteStore : IDisposable
+public sealed partial class NoteStore : IDisposable
 {
     public const long InlineFileLimitBytes = 1024L * 1024L;
     public const int EditorLimitChars = 262144;
@@ -339,6 +339,7 @@ public sealed class NoteStore : IDisposable
         lock (_sync) meta = (_notes.FirstOrDefault(n => n.Id == id) ?? throw new KeyNotFoundException("Заметка не найдена.")).Clone();
         var doc = new NoteDocument { Meta = meta };
         if (IsExternalOnly(meta)) { doc.ExternalOnly = true; return doc; }
+        if (meta.IsProtected && !IsUnlocked(id)) { doc.Locked = true; return doc; }
         doc.Content = ReadContent(id);
         doc.BlocksJson = ReadValidBlocks(id, doc.Content);
         if (markOpened)
@@ -495,7 +496,9 @@ public sealed class NoteStore : IDisposable
     public NoteMeta Duplicate(string id)
     {
         var doc = Open(id);
+        if (doc.Locked) throw new NoteLockedException();
         if (doc.ExternalOnly) throw new InvalidOperationException("Большой файл нельзя продублировать как заметку.");
+        if (doc.Meta.IsProtected) throw new InvalidOperationException("Копия защищённой заметки получилась бы без пароля. Сначала снимите пароль.");
         var copy = CreateNote(doc.Meta.ProjectId, doc.Content, doc.Meta.Title + " (копия)");
         if (doc.BlocksJson != null) { WriteBlocks(copy.Id, doc.BlocksJson, doc.Content); }
         return copy;
@@ -530,12 +533,12 @@ public sealed class NoteStore : IDisposable
         var path = Paths.ContentPath(id);
         if (!File.Exists(path)) return "";
         if (new FileInfo(path).Length > InlineFileLimitBytes) return "";
-        return ReadTextFile(path);
+        return Unprotect(id, ReadTextFile(path));
     }
 
     private string ReadContentSafe(NoteMeta n) { try { return IsExternalOnly(n) ? "" : ReadContent(n.Id); } catch { return ""; } }
 
-    private void WriteContent(string id, string content) => JsonIO.WriteAllTextAtomic(Paths.ContentPath(id), content);
+    private void WriteContent(string id, string content) => JsonIO.WriteAllTextAtomic(Paths.ContentPath(id), Protect(id, content));
 
     private sealed class BlocksFile
     {
@@ -549,14 +552,15 @@ public sealed class NoteStore : IDisposable
         using var doc = JsonDocument.Parse(blocksJson); // validates that the UI really sent JSON
         if (doc.RootElement.ValueKind != JsonValueKind.Array) throw new InvalidDataException("Блоки должны быть массивом JSON.");
         var file = new BlocksFile { ContentSha256 = Sha256(content), Blocks = doc.RootElement.Clone() };
-        JsonIO.WriteAtomic(Paths.BlocksPath(id), file);
+        JsonIO.WriteAllTextAtomic(Paths.BlocksPath(id), Protect(id, JsonSerializer.Serialize(file, file.GetType(), JsonIO.Options)));
     }
 
     private string? ReadValidBlocks(string id, string content)
     {
         try
         {
-            var f = JsonIO.Read<BlocksFile>(Paths.BlocksPath(id));
+            if (!File.Exists(Paths.BlocksPath(id))) return null;
+            var f = JsonSerializer.Deserialize<BlocksFile>(Unprotect(id, File.ReadAllText(Paths.BlocksPath(id), Encoding.UTF8)), JsonIO.Options);
             if (f == null || f.Schema != 1) return null;
             if (!string.Equals(f.ContentSha256, Sha256(content), StringComparison.OrdinalIgnoreCase)) return null; // text edited elsewhere → stale
             return f.Blocks.GetRawText();
@@ -583,7 +587,7 @@ public sealed class NoteStore : IDisposable
             Directory.CreateDirectory(dir);
             var files = new DirectoryInfo(dir).GetFiles("*.txt").OrderByDescending(f => f.LastWriteTimeUtc).ToList();
             if (!force && files.Count > 0 && DateTime.UtcNow - files[0].LastWriteTimeUtc < HistoryInterval) return;
-            JsonIO.WriteAllTextAtomic(Path.Combine(dir, DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture) + ".txt"), content);
+            JsonIO.WriteAllTextAtomic(Path.Combine(dir, DateTime.Now.ToString("yyyyMMdd_HHmmss_fff", CultureInfo.InvariantCulture) + ".txt"), Protect(id, content));
             var all = new DirectoryInfo(dir).GetFiles("*.txt")
                 .Select(f => new HistoryFileInfo(f.FullName, f.Length, f.LastWriteTimeUtc))
                 .OrderByDescending(f => f.LastWriteTimeUtc).ToList();
@@ -644,7 +648,7 @@ public sealed class NoteStore : IDisposable
         if (!Directory.Exists(dir)) return Array.Empty<HistoryEntry>();
         return new DirectoryInfo(dir).GetFiles("*.txt").OrderByDescending(f => f.Name).Select(f =>
         {
-            var text = SafePreview(f.FullName);
+            var text = IsProtectedNote(id) ? "Версия защищена паролем" : SafePreview(f.FullName);
             return new HistoryEntry { Name = f.Name, TimestampLocal = f.LastWriteTime.ToString("dd.MM.yyyy HH:mm:ss", CultureInfo.InvariantCulture), Bytes = f.Length, Preview = text };
         }).ToList();
     }
@@ -654,7 +658,7 @@ public sealed class NoteStore : IDisposable
         if (!Regex.IsMatch(name ?? "", @"^\d{8}_\d{6}_\d{3}\.txt$")) throw new ArgumentException("Недопустимое имя версии.");
         var path = Path.Combine(Paths.HistoryDir(id), name!);
         if (!File.Exists(path)) throw new FileNotFoundException("Версия не найдена.");
-        return ReadTextFile(path);
+        return Unprotect(id, ReadTextFile(path));
     }
 
     private static string SafePreview(string path)
@@ -966,7 +970,7 @@ public sealed class NoteStore : IDisposable
         {
             try
             {
-                if (IsExternalOnly(n) || ReadContent(n.Id).Length > 0) continue;
+                if (n.IsProtected || IsExternalOnly(n) || ReadContent(n.Id).Length > 0) continue;
                 if (!TextExtensions.Contains(Path.GetExtension(n.SourcePath)) || !IsLocalDrivePath(n.SourcePath)) continue;
                 var fi = new FileInfo(n.SourcePath);
                 if (!fi.Exists || fi.Length == 0 || fi.Length > InlineFileLimitBytes) continue;
@@ -990,7 +994,7 @@ public sealed class NoteStore : IDisposable
             if (set != null && !set.Contains(n.Id)) continue;
             try
             {
-                if (IsExternalOnly(n) || ReadContent(n.Id).Length > 0) continue;
+                if (n.IsProtected || IsExternalOnly(n) || ReadContent(n.Id).Length > 0) continue;
                 if (!TextExtensions.Contains(Path.GetExtension(n.SourcePath)) || !IsLocalDrivePath(n.SourcePath) || !File.Exists(n.SourcePath) || new FileInfo(n.SourcePath).Length > InlineFileLimitBytes) continue;
                 var text = ReadTextFile(n.SourcePath);
                 if (text.Length == 0) continue;
@@ -1020,7 +1024,7 @@ public sealed class NoteStore : IDisposable
             try
             {
                 var sample = "";
-                if (!IsExternalOnly(n) && File.Exists(Paths.ContentPath(n.Id))) sample = ReadIndexSample(Paths.ContentPath(n.Id));
+                if (!n.IsProtected && !IsExternalOnly(n) && File.Exists(Paths.ContentPath(n.Id))) sample = ReadIndexSample(Paths.ContentPath(n.Id));
                 lock (_sync) _search[n.Id] = IndexKey(n, sample);
             }
             catch { /* a broken file must not stop indexing */ }
@@ -1030,6 +1034,7 @@ public sealed class NoteStore : IDisposable
 
     private static string IndexKey(NoteMeta n, string content)
     {
+        if (n.IsProtected) content = "";   // the text of a protected note never reaches the search index
         var sample = content.Length > SearchSampleChars ? content[..SearchSampleChars] : content;
         return ((n.Title ?? "") + "\n" + (n.Tags ?? "") + "\n" + sample).ToLowerInvariant();
     }

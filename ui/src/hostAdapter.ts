@@ -51,7 +51,9 @@ export function toLabState(boot: Bootstrap): LoadedHost {
       ...(n.isPinned ? { pinned: true } : {}),
       ...(Number.isFinite(opened) ? { lastOpenedAt: opened } : {}),
       ...(Number.isFinite(modified) ? { modifiedAt: modified } : {}),
-      ...(n.externalOnly ? { readOnly: true } : {}),
+      ...(n.externalOnly || n.locked ? { readOnly: true } : {}),
+      ...(n.isProtected ? { protected: true } : {}),
+      ...(n.locked ? { locked: true } : {}),
       ...(n.sourcePath && !n.externalOnly && n.sourceType === "file" ? { sourcePath: n.sourcePath } : {}),
       ...(n.writeThrough ? { writeThrough: true } : {}),
     });
