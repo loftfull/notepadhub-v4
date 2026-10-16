@@ -40,6 +40,7 @@ export function toLabState(boot: Bootstrap): LoadedHost {
   const tags: Record<string, string> = {};
   for (const n of boot.notes) {
     const opened = Date.parse(n.lastOpenedUtc);
+    const modified = Date.parse(n.updatedUtc);
     docs.push({
       id: n.id, title: n.title, folder: nameById.get(n.projectId) ?? projects[0]?.name ?? "Входящие",
       updated: formatUpdated(n.updatedUtc), icon: "note",
@@ -48,6 +49,7 @@ export function toLabState(boot: Bootstrap): LoadedHost {
       ...(n.isDeleted ? { deletedAt: n.updatedUtc } : {}),
       ...(n.isPinned ? { pinned: true } : {}),
       ...(Number.isFinite(opened) ? { lastOpenedAt: opened } : {}),
+      ...(Number.isFinite(modified) ? { modifiedAt: modified } : {}),
       ...(n.externalOnly ? { readOnly: true } : {}),
       ...(n.sourcePath && !n.externalOnly && n.sourceType === "file" ? { sourcePath: n.sourcePath } : {}),
       ...(n.writeThrough ? { writeThrough: true } : {}),

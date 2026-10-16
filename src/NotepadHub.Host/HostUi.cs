@@ -12,6 +12,13 @@ internal sealed class HostUi : IHostUi
     private readonly MainWindow _owner;
     public HostUi(MainWindow owner) { _owner = owner; }
 
+    /// <summary>Opens Explorer with the note's file selected. The path comes from the note store, never from the page.</summary>
+    public void RevealFile(string path)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", "/select,\"" + path + "\"") { UseShellExecute = true }); }
+        catch (Exception ex) { HostLog.Write("reveal failed: " + ex.Message); }
+    }
+
     public string? PickWindowsSnapshot() => _owner.Dispatcher.Invoke(() =>
     {
         var d = new OpenFileDialog { Title = "ZIP-снимок Windows Notepad (папка TabState)", Filter = "ZIP-архив|*.zip", CheckFileExists = true };

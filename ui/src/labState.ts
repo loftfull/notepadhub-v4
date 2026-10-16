@@ -3,6 +3,8 @@ import type { PartialBlock } from "@blocknote/core";
 export type DocItem = {
   id: string; title: string; folder: string; updated: string; icon: "note" | "task";
   legacyGuid?: string; archived?: boolean; deletedAt?: string; pinned?: boolean; lastOpenedAt?: number;
+  /** the last change of the text or the name (milliseconds): the notes list sorts and groups by it */
+  modifiedAt?: number;
   /** set for huge files that live only on disk: shown, never overwritten */
   readOnly?: boolean;
   /** the note came from a file on disk; with writeThrough every edit is saved back into that file */

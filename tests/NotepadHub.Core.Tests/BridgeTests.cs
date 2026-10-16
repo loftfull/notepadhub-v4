@@ -16,6 +16,8 @@ public class BridgeTests
         public string? SavePath { get; set; }
         public string? OpenPath { get; set; }
         public bool Confirm { get; set; }
+        public List<string> Revealed { get; } = new();
+        public void RevealFile(string path) => Revealed.Add(path);
         public string? PickBackupSavePath(string suggestedName) => SavePath;
         public string? PickBackupOpenPath() => OpenPath;
         public bool ConfirmRestore(NotepadHub.Core.Backup.BackupInfo backup, int currentNotes) => Confirm;
@@ -39,6 +41,21 @@ public class BridgeTests
         var ids = b.GetProperty("projects").EnumerateArray().Select(p => p.GetProperty("id").GetString()).ToList();
         Assert.Contains("inbox", ids); Assert.Contains("import-windows", ids);
         Assert.Equal(0, b.GetProperty("notes").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Reveal_note_shows_only_the_notes_own_file_and_refuses_an_unknown_id()
+    {
+        using var t = new TempRoot(); using var s = t.Open();
+        var ui = new FakeUi();
+        var d = new BridgeDispatcher(s, ui, "test");
+        await Call(d, "upsertNote", new { id = "note-1760000000001", projectId = "inbox", title = "Тест", tags = "", pinned = false, archived = false, deleted = false, content = "текст", blocksJson = "[]" });
+        await Call(d, "revealNote", new { id = "note-1760000000001" });
+        Assert.Single(ui.Revealed);
+        Assert.EndsWith("note-1760000000001.txt", ui.Revealed[0]);
+        await Assert.ThrowsAsync<BridgeException>(() => Call(d, "revealNote", new { id = "note-1760000000999" }));
+        await Assert.ThrowsAnyAsync<Exception>(() => Call(d, "revealNote", new { id = "..\\..\\Windows\\win" }));
+        Assert.Single(ui.Revealed);
     }
 
     [Fact]

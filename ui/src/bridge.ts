@@ -121,6 +121,7 @@ function createMock(): Transport {
       case "listHistory": return [];
       case "readHistory": return "";
       case "importWindowsSnapshot": return { created: 0, updated: 0, skipped: 0, emptyWithExternalFile: 0, warnings: ["В режиме без хоста импорт недоступен."], cancelled: true } satisfies ImportSummary;
+      case "revealNote": return {};
       case "openFiles": return { created: [], cancelled: true };
       case "flushAck": return {};
       case "checkpoint": return {};
@@ -160,6 +161,7 @@ export const host = {
   fetchImage: (url: string) => call<{ file: string }>("fetchImage", { url }),
   readAsset: (name: string) => call<{ data: string }>("readAsset", { name }),
   generateImage: (prompt: string, width: number, height: number, via: string, model: string, consent: boolean) => call<{ file: string }>("generateImage", { prompt, width, height, via, model, consent }),
+  revealNote: (id: string) => call<Record<string, never>>("revealNote", { id }),
   openFiles: () => call<{ created: string[]; cancelled?: boolean; warnings?: string[] }>("openFiles"),
   flushAck: (result?: { ok: boolean; failed: number }) => call<Record<string, never>>("flushAck", result ?? { ok: true, failed: 0 }),
   previewReferencedFiles: () => call<{ files: Array<{ id: string; title: string; sourcePath: string; bytes: number }> }>("previewReferencedFiles"),

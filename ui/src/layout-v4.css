@@ -701,3 +701,22 @@
 .app-shell .workspace.nav-collapsed .sidebar > .settings-menu > summary { width: 36px; padding: 0; justify-content: center; margin: 0 auto; }
 .app-shell .workspace.nav-collapsed .sidebar > .settings-menu > summary span { display: none; }
 .app-shell .workspace.nav-collapsed .sidebar > .settings-menu .note-toolbar-menu { bottom: 0; left: calc(100% + 10px); }
+
+/* ------------------------------------------------------------------ v4.8: ideas taken over from the analogue (Obsidian): history, dated groups with a first line, outline, richer note menu */
+.app-shell .note-nav { display: inline-flex; align-items: center; gap: 0; flex: 0 0 auto; margin-right: 6px; }
+.app-shell .notes-tools { display: inline-flex; align-items: center; gap: 2px; }
+.app-shell .notes-tools .icon-button.is-on { background: var(--accent-soft); color: var(--accent-strong); }
+.app-shell .notes-group button { display: flex; align-items: center; gap: 6px; width: 100%; height: 26px; padding: 0 var(--space-3); border: 0; background: transparent; color: var(--ink-quiet); font: inherit; font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; }
+.app-shell .notes-group button small { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+.app-shell .notes-group button[aria-expanded="false"] .notes-group-chevron { transform: rotate(-90deg); }
+.app-shell .notes-group-chevron { transition: transform .12s; }
+.app-shell .notes-list .note-line { display: flex; flex-direction: column; min-width: 0; flex: 1; text-align: left; }
+.app-shell .notes-list .note-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .notes-list .note-snippet { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--ink-quiet); font-weight: 400; }
+.app-shell .notes-list button:has(.note-snippet) { height: 44px; align-items: center; }
+.app-shell .menu-key { margin-left: auto; font: inherit; font-size: 11px; color: var(--ink-quiet); }
+.app-shell .status-links { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: 0; border-radius: 12px; background: transparent; color: var(--ink-soft); font: inherit; cursor: pointer; }
+.app-shell .status-links:hover { background: var(--surface-hover); color: var(--ink); }
+.app-shell .outline-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 1px; }
+.app-shell .outline-list button { display: block; width: 100%; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font: inherit; font-size: 13px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.app-shell .outline-list button:hover { background: var(--surface-hover); color: var(--accent-strong); }

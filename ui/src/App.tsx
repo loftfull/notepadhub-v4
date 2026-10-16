@@ -8,13 +8,13 @@ import { INSIGHTS_HEADING, MAX_INSTRUCTION, TRANSFORMATIONS, insightMarkdown, lo
 import { TransformationsDialog } from "./components/TransformationsDialog";
 import { TrashView } from "./components/TrashView";
 import { parseAiAnalysis } from "./aiAnalysis";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { useCreateBlockNote } from "@blocknote/react";
 import { ru } from "@blocknote/core/locales";
 import type { PartialBlock } from "@blocknote/core";
 import {
-  Archive, ArrowDownToLine, ChevronLeft, ChevronRight, CircleAlert, Minus, Settings, Star, Check, ChevronDown, Clock3, Command, Copy, Download, FileText,
+  AlignLeft, Archive, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpDown, ExternalLink, Link2, Replace, ChevronLeft, ChevronRight, CircleAlert, Minus, Settings, Star, Check, ChevronDown, Clock3, Command, Copy, Download, FileText,
   Folder, FolderInput, FolderOpen, Hash, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Columns2, ImagePlus, LoaderCircle, Redo2, Tag, Wand2, RotateCcw, Search, Undo2,
   Sparkles, Sun, Trash2, X, Eye, Pin, PinOff, List, Ellipsis, Info,
 } from "lucide-react";
@@ -78,6 +78,16 @@ function sampleContent(title: string): PartialBlock[] {
 function plural(n: number, forms: [string, string, string]): string {
   const m10 = n % 10, m100 = n % 100;
   return m10 === 1 && m100 !== 11 ? forms[0] : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? forms[1] : forms[2];
+}
+
+const NOTE_GROUPS = ["Сегодня", "Вчера", "Последние 7 дней", "Последние 30 дней", "Ранее"] as const;
+/** The group of the notes list a moment of change belongs to (calendar days, local time). */
+function dateGroup(ts: number | undefined, now: number): (typeof NOTE_GROUPS)[number] {
+  if (!ts) return NOTE_GROUPS[4];
+  const d = new Date(now);
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const day = 24 * 60 * 60 * 1000;
+  return ts >= start ? NOTE_GROUPS[0] : ts >= start - day ? NOTE_GROUPS[1] : ts >= start - 6 * day ? NOTE_GROUPS[2] : ts >= start - 29 * day ? NOTE_GROUPS[3] : NOTE_GROUPS[4];
 }
 
 const AUTO_NAME = /^Заметка \d+$/;
@@ -160,20 +170,25 @@ function escapeHtml(value: string): string {
 }
 
 type InspectorProps = {
+  headings: Array<{ id: string; level: number; text: string }>;
+  onJump: (id: string) => void;
   onClose: () => void;
   activeDoc?: DocItem;
   folder: string;
   onMove: () => void;
 };
 
-function Inspector({ onClose, activeDoc, folder, onMove }: InspectorProps) {
+function Inspector({ headings, onJump, onClose, activeDoc, folder, onMove }: InspectorProps) {
   return (
-    <aside className="inspector-panel note-properties-panel" aria-label="Свойства заметки">
+    <aside className="inspector-panel note-properties-panel" aria-label="Содержание и свойства заметки">
       <div className="inspector-heading">
-        <strong>Свойства заметки</strong>
+        <strong>Содержание и свойства</strong>
         <button className="icon-button tiny" onClick={onClose} aria-label="Закрыть инспектор"><X size={17} /></button>
       </div>
       <div className="inspector-content">
+        <div className="property-label">СОДЕРЖАНИЕ</div>
+        {headings.length === 0 ? <div className="property-note">В заметке пока нет заголовков. Оглавление строится по заголовкам и позволяет перейти к разделу.</div>
+          : <ul className="outline-list">{headings.map((h) => <li key={h.id} style={{ paddingLeft: (h.level - 1) * 14 }}><button onClick={() => onJump(h.id)} title={h.text}>{h.text}</button></li>)}</ul>}
         <div className="property-label">РАСПОЛОЖЕНИЕ</div>
         <button className="property-value property-action" onClick={onMove} disabled={!activeDoc}><Folder size={16} />{activeDoc?.folder ?? folder}<span>Переместить</span></button>
         <div className="property-label">СОЗДАНО</div>
@@ -327,6 +342,13 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const [imageDialog, setImageDialog] = useState<null | { kind: "generate" | "edit"; selection: string; note: string; startId?: string; prompt?: string }>(null);
   const tabsScrollerRef = useRef<HTMLDivElement>(null);
   const [tabsEdge, setTabsEdge] = useState({ overflow: false, left: false, right: false });   // the tab strip scrolls sideways: arrows and the mouse wheel
+  const [notesSort, setNotesSort] = useState<"modified" | "title">(() => { try { return window.localStorage.getItem("nh4-notes-sort") === "title" ? "title" : "modified"; } catch { return "modified"; } });
+  const [notesPreview, setNotesPreview] = useState(() => { try { return window.localStorage.getItem("nh4-notes-preview") === "1"; } catch { return false; } });
+  const [closedGroups, setClosedGroups] = useState<string[]>([]);
+  const navStackRef = useRef<string[]>([]);
+  const navPosRef = useRef(-1);
+  const navSilentRef = useRef(false);
+  const [navState, setNavState] = useState({ back: false, forward: false });
   const [trashPane, setTrashPane] = useState(false);   // the trash is shown as a list in the main area
   const [railMenu, setRailMenu] = useState<null | "pinned" | "recent">(null);   // the quick list next to the narrow library column
   const [tagsOpen, setTagsOpen] = useState(() => { try { return window.localStorage.getItem("nh4-tags-open") === "1"; } catch { return false; } });
@@ -384,6 +406,21 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   }).sort((left, right) => noteView === "recent" || noteView === "pinned"
       ? (right.lastOpenedAt ?? 0) - (left.lastOpenedAt ?? 0)
       : 0);
+  const listNow = Date.now();
+  const listDocs = noteView === "recent" || noteView === "pinned" ? filteredDocs
+    : [...filteredDocs].sort((a, b) => notesSort === "title" ? a.title.localeCompare(b.title, "ru") : (b.modifiedAt ?? 0) - (a.modifiedAt ?? 0));
+  const listGroups: Array<{ name: string; items: DocItem[] }> = notesSort === "modified" && noteView !== "recent" && noteView !== "pinned"
+    ? NOTE_GROUPS.map((name) => ({ name, items: listDocs.filter((doc) => dateGroup(doc.modifiedAt, listNow) === name) })).filter((group) => group.items.length > 0)
+    : [{ name: "", items: listDocs }];
+  const snippetOf = (doc: DocItem): string => {
+    for (const block of contents[doc.id] ?? []) {
+      if (block.type === "heading" || block.type === "image") continue;
+      const text = blockText((block as { content?: unknown }).content).replace(/\s+/g, " ").trim();
+      if (text) return text.slice(0, 90);
+    }
+    return "";
+  };
+  const headingsOf = activeId ? (contents[activeId] ?? []).filter((block) => block.type === "heading").map((block) => ({ id: String((block as { id?: string }).id ?? ""), level: Number(((block as { props?: { level?: number } }).props?.level) ?? 1), text: blockText((block as { content?: unknown }).content).trim() })).filter((h) => h.id && h.text) : [];
   // Open tabs: a note is a tab once opened and stays until the user closes it. The strip only shows tabs that belong to the current section (trash / archive / regular).
   const [openIds, setOpenIds] = useState<string[]>(() => {
     try {
@@ -604,7 +641,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
 
   const createNote = useCallback((title: string, heading: string = title) => {
     const id = `note-${Date.now()}`;
-    const next: DocItem = { id, title, folder, updated: "только что", icon: "note", lastOpenedAt: Date.now() };
+    const next: DocItem = { id, title, folder, updated: "только что", icon: "note", lastOpenedAt: Date.now(), modifiedAt: Date.now() };
     const initial = [
       { type: "heading" as const, props: { level: 1 as const }, content: heading },
       { type: "paragraph" as const, content: "" },
@@ -1666,7 +1703,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         : "").trim();
     setContents((current) => ({ ...current, [id]: blocks }));
     setDocs((current) => current.map((doc) => doc.id === id
-      ? { ...doc, ...(documentTitle ? { title: documentTitle } : {}), updated: "только что" }
+      ? { ...doc, ...(documentTitle ? { title: documentTitle } : {}), updated: "только что", modifiedAt: Date.now() }
       : doc));
     setSavedAt("Сохраняем локально…");
   }, [aiProposal, editor]);
@@ -1786,6 +1823,50 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     setSelectedSearchIndex(0);
     window.setTimeout(restoreSearchFocus, 0);
   }, [restoreSearchFocus, selectDocument]);
+
+  // back and forward through the notes opened one after another (Alt + left / right)
+  useEffect(() => {
+    if (!activeId) return;
+    if (navSilentRef.current) navSilentRef.current = false;
+    else if (navStackRef.current[navPosRef.current] !== activeId) {
+      navStackRef.current = [...navStackRef.current.slice(0, navPosRef.current + 1), activeId].slice(-50);
+      navPosRef.current = navStackRef.current.length - 1;
+    }
+    setNavState({ back: navPosRef.current > 0, forward: navPosRef.current < navStackRef.current.length - 1 });
+  }, [activeId]);
+  const goHistory = useCallback((delta: -1 | 1) => {
+    let pos = navPosRef.current;
+    for (;;) {
+      pos += delta;
+      const id = navStackRef.current[pos];
+      if (id === undefined) return;
+      const doc = docsRef.current.find((item) => item.id === id && !item.deletedAt);
+      if (!doc) continue;
+      navPosRef.current = pos;
+      if (doc.id === activeIdRef.current) { setNavState({ back: pos > 0, forward: pos < navStackRef.current.length - 1 }); return; }
+      navSilentRef.current = true;
+      setNoteView(doc.archived ? "archive" : "folder");
+      setFolder(doc.folder);
+      selectDocument(doc);
+      return;
+    }
+  }, [selectDocument]);
+  const goHistoryRef = useRef(goHistory);
+  goHistoryRef.current = goHistory;
+
+  const copyNoteLink = useCallback(() => {
+    if (!activeDoc) return;
+    const text = `[[${activeDoc.title}]]`;
+    void navigator.clipboard.writeText(text).then(() => setNotice(`Ссылка ${text} скопирована: вставьте её в другую заметку`), () => setNotice("Не удалось скопировать ссылку"));
+  }, [activeDoc]);
+  const revealNote = useCallback(async () => {
+    if (!activeId) return;
+    try { await sync.flush(); await host.revealNote(activeId); } catch (error) { setNotice(error instanceof Error ? error.message : "Не удалось показать файл"); }
+  }, [activeId, sync]);
+  const jumpToBlock = useCallback((id: string) => {
+    try { editor.setTextCursorPosition(id, "start"); } catch { /* the block is gone */ }
+    document.querySelector(`[data-id="${id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [editor]);
 
   const exportMarkdown = useCallback(async () => {
     try {
@@ -1957,6 +2038,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
 
   useEffect(() => {
     const keyHandler = (event: KeyboardEvent) => {
+      if (event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) { event.preventDefault(); goHistoryRef.current(event.key === "ArrowLeft" ? -1 : 1); return; }
       const action = matchShortcut(event);
       if (!action) return;
       event.preventDefault();
@@ -2118,6 +2200,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   const saveFailed = /не сохранен/i.test(savedAt);
   const saveState: "saved" | "saving" | "error" = saveFailed ? "error" : /^Сохраняем|^Сохраняется/.test(savedAt) ? "saving" : "saved";
   const noteTagList = activeDoc ? parseTags(tags[activeDoc.id]) : [];
+  const backlinkCount = activeDoc ? linkIndex.backlinks(activeDoc.id).length : 0;
   const noteMenuClose = (event: React.MouseEvent<HTMLDivElement>) => { if ((event.target as HTMLElement).closest("button")) event.currentTarget.closest("details")?.removeAttribute("open"); };
 
   return (
@@ -2127,6 +2210,10 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         <div className="brand-lockup"><div className="brand-mark"><FileText size={17} strokeWidth={2.1} /></div><span>Notepad Hub</span></div>
         </div>
         <div className="topbar-note" role="group" aria-label="Текущая заметка">
+          <div className="note-nav" role="group" aria-label="История заметок">
+            <button type="button" className="icon-button quiet bar-icon" aria-label="Назад к предыдущей заметке" title="Назад (Alt ←)" disabled={!navState.back} onClick={() => goHistory(-1)}><ArrowLeft size={16} /></button>
+            <button type="button" className="icon-button quiet bar-icon" aria-label="Вперёд к следующей заметке" title="Вперёд (Alt →)" disabled={!navState.forward} onClick={() => goHistory(1)}><ArrowRight size={16} /></button>
+          </div>
           <div className="note-crumbs">
             <button className="crumb-folder" disabled={!activeDoc} onClick={moveActiveNote} title="Переместить в другой проект"><Folder size={14} /><span>{activeDoc?.folder ?? folder}</span></button>
             <span className="crumb-sep" aria-hidden="true">/</span>
@@ -2166,13 +2253,19 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
                 <button disabled={!activeDoc} onClick={() => activeDoc && setFormDialog({ kind: "tag", title: "Метки заметки", value: tags[activeDoc.id] ?? "", hint: "Метки через запятую" })}><Hash size={14} />Метки…</button>
                 <button disabled={!activeDoc || Boolean(activeDoc.deletedAt)} onClick={togglePinActiveNote}>{activeDoc?.pinned ? <PinOff size={14} /> : <Pin size={14} />}{activeDoc?.pinned ? "Открепить" : "Закрепить"}</button>
                 <div className="note-toolbar-menu-divider" />
-                {activeDoc?.deletedAt ? <><button onClick={restoreActiveNote}><RotateCcw size={14} />Восстановить</button><button className="destructive-action" onClick={permanentlyDeleteActiveNote}><Trash2 size={14} />Удалить навсегда</button></> : <><button disabled={!activeDoc} onClick={duplicateActiveNote}><Copy size={14} />Создать копию</button><button disabled={!activeDoc} onClick={archiveActiveNote}><Archive size={14} />{activeDoc?.archived ? "Вернуть в проект" : "В архив"}</button><button disabled={!activeDoc} className="destructive-action" onClick={deleteActiveNote}><Trash2 size={14} />В корзину</button></>}
+                <button disabled={!activeDoc} onClick={() => setFind({ replace: false })}><Search size={14} />Найти в заметке…<kbd className="menu-key">Ctrl+F</kbd></button>
+                <button disabled={!activeDoc} onClick={() => setFind({ replace: true })}><Replace size={14} />Заменить…<kbd className="menu-key">Ctrl+H</kbd></button>
+                <div className="note-toolbar-menu-divider" />
+                <button disabled={!activeDoc} onClick={copyNoteLink}><Link2 size={14} />Копировать ссылку на заметку</button>
+                {isHosted() && <button disabled={!activeDoc} onClick={() => void revealNote()}><ExternalLink size={14} />Показать в Проводнике</button>}
+                {activeDoc?.sourcePath && isHosted() && <button onClick={() => void toggleWriteThrough()} title={activeDoc.sourcePath}><FileText size={14} />{activeDoc.writeThrough ? "Не сохранять в файл" : "Сохранять в файл"}<small className="menu-hint">{activeDoc.sourcePath.split(/[\\/]/).pop()}</small></button>}
+                <button onClick={exportMarkdown}><ArrowDownToLine size={14} />Экспорт в Markdown</button>
                 <div className="note-toolbar-menu-divider" />
                 <button disabled={!activeDoc || !isHosted()} onClick={() => void openHistory()}><Clock3 size={14} />История версий…</button>
-                {activeDoc?.sourcePath && isHosted() && <button onClick={() => void toggleWriteThrough()} title={activeDoc.sourcePath}><FileText size={14} />{activeDoc.writeThrough ? "Не сохранять в файл" : "Сохранять в файл"}<small className="menu-hint">{activeDoc.sourcePath.split(/[\\/]/).pop()}</small></button>}
-                <button disabled={!activeDoc} onClick={() => setActiveInspector((current) => current === "properties" ? null : "properties")}><Info size={14} />Свойства заметки</button>
-                <button onClick={exportMarkdown}><ArrowDownToLine size={14} />Экспорт в Markdown</button>
+                <button disabled={!activeDoc} onClick={() => setActiveInspector((current) => current === "properties" ? null : "properties")}><Info size={14} />Содержание и свойства</button>
                 {canUndoAi && <button onClick={undoAcceptedAi}><RotateCcw size={14} />Отменить AI-изменение</button>}
+                <div className="note-toolbar-menu-divider" />
+                {activeDoc?.deletedAt ? <><button onClick={restoreActiveNote}><RotateCcw size={14} />Восстановить</button><button className="destructive-action" onClick={permanentlyDeleteActiveNote}><Trash2 size={14} />Удалить навсегда</button></> : <><button disabled={!activeDoc} onClick={duplicateActiveNote}><Copy size={14} />Создать копию</button><button disabled={!activeDoc} onClick={archiveActiveNote}><Archive size={14} />{activeDoc?.archived ? "Вернуть в проект" : "В архив"}</button><div className="note-toolbar-menu-divider" /><button disabled={!activeDoc} className="destructive-action" onClick={deleteActiveNote}><Trash2 size={14} />В корзину</button></>}
               </div>
             </details>
         </div>
@@ -2186,9 +2279,12 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
             {folders.map((name) => <button key={name} className={`folder-row${noteView === "folder" && folder === name ? " selected" : ""}`} aria-current={noteView === "folder" && folder === name ? "page" : undefined} onClick={() => handleFolderSelect(name)}><Folder size={16} className="folder-icon" /><span>{name === "Архив" ? "Архив · проект" : name}</span><span className="folder-count">{docs.filter((doc) => doc.folder === name && !doc.deletedAt && !doc.archived).length}</span></button>)}
           </section>
           <section className="nav-section notes-section" aria-label="Заметки раздела">
-            <div className="section-label"><h2>{noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : "Заметки"}</h2><span className="notes-count">{filteredDocs.length}</span></div>
+            <div className="section-label"><h2>{noteView === "trash" ? "Корзина" : noteView === "archive" ? "Архив" : noteView === "pinned" ? "Избранное" : noteView === "recent" ? "Недавние" : "Заметки"}</h2><span className="notes-tools"><button type="button" className="icon-button tiny" aria-label={notesSort === "modified" ? "Сортировка: по изменению. Нажмите, чтобы сортировать по названию" : "Сортировка: по названию. Нажмите, чтобы сортировать по изменению"} title={notesSort === "modified" ? "Сначала изменённые: нажмите для сортировки по названию" : "По названию: нажмите для сортировки по изменению"} onClick={() => { const next = notesSort === "modified" ? "title" : "modified"; setNotesSort(next); try { window.localStorage.setItem("nh4-notes-sort", next); } catch { /* optional */ } }}><ArrowUpDown size={14} /></button><button type="button" className={`icon-button tiny${notesPreview ? " is-on" : ""}`} aria-pressed={notesPreview} aria-label="Показывать начало текста под названием" title="Начало текста под названием" onClick={() => { const next = !notesPreview; setNotesPreview(next); try { window.localStorage.setItem("nh4-notes-preview", next ? "1" : "0"); } catch { /* optional */ } }}><AlignLeft size={14} /></button><span className="notes-count">{filteredDocs.length}</span></span></div>
             <ul className="notes-list">
-              {filteredDocs.map((doc) => <li key={doc.id}><button className={doc.id === activeId ? "is-current" : undefined} aria-current={doc.id === activeId ? "true" : undefined} title={doc.title} onClick={() => selectDocument(doc)}><FileText size={14} aria-hidden="true" /><span>{doc.title}</span></button></li>)}
+              {listGroups.map((group) => <Fragment key={group.name || "all"}>
+                {group.name && <li className="notes-group"><button type="button" aria-expanded={!closedGroups.includes(group.name)} onClick={() => setClosedGroups((current) => current.includes(group.name) ? current.filter((x) => x !== group.name) : [...current, group.name])}><ChevronDown size={13} className="notes-group-chevron" aria-hidden="true" />{group.name}<small>{group.items.length}</small></button></li>}
+                {!closedGroups.includes(group.name) && group.items.map((doc) => <li key={doc.id}><button className={doc.id === activeId ? "is-current" : undefined} aria-current={doc.id === activeId ? "true" : undefined} title={doc.title} onClick={() => selectDocument(doc)}><FileText size={14} aria-hidden="true" /><span className="note-line"><span className="note-name">{doc.title}</span>{notesPreview && snippetOf(doc) && <small className="note-snippet">{snippetOf(doc)}</small>}</span></button></li>)}
+              </Fragment>)}
               {filteredDocs.length === 0 && <li className="notes-empty">В этом разделе нет заметок</li>}
             </ul>
           </section>
@@ -2286,11 +2382,12 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
             {secondId && <div className="editor-column second-column" aria-label="Вторая заметка">
               <div className="editor-card second-card"><BlockNoteView editor={editor2} theme={dark ? "dark" : "light"} onChange={handleSecondChange} slashMenu sideMenu={false} /></div>
             </div>}
-            {activeInspector === "properties" && <Inspector onClose={() => setActiveInspector(null)} activeDoc={activeDoc} folder={folder} onMove={moveActiveNote} />}
+            {activeInspector === "properties" && <Inspector headings={headingsOf} onJump={jumpToBlock} onClose={() => setActiveInspector(null)} activeDoc={activeDoc} folder={folder} onMove={moveActiveNote} />}
           </div>
           <footer className="statusbar" aria-label="Служебная строка">
             <div className="status-left">
               <span className={`status-save is-${saveState}`} role="status" aria-live="polite" title={savedAt}>{saveState === "saved" ? <Check size={14} aria-hidden="true" /> : saveState === "saving" ? <LoaderCircle size={14} className="ai-spinner" aria-hidden="true" /> : <CircleAlert size={14} aria-hidden="true" />}{saveState === "saved" ? "Сохранено" : saveState === "saving" ? "Сохраняется…" : "Не сохранено"}{saveState === "error" && <small>{savedAt.replace(/^Не сохранено:?\s*/i, "").slice(0, 70)}</small>}</span>
+              {activeDoc && backlinkCount > 0 && <><span className="status-divider" aria-hidden="true">·</span><button className="status-links" title="Заметки, которые ссылаются на эту: показать" onClick={() => { const panel = document.querySelector<HTMLDetailsElement>(".links-panel"); if (panel) { panel.open = true; panel.scrollIntoView({ block: "center", behavior: "smooth" }); } }}><Link2 size={13} aria-hidden="true" />Обратных ссылок: {backlinkCount}</button></>}
               {activeDoc && <><span className="status-divider" aria-hidden="true">·</span>
               <button className="status-tags" title="Метки заметки: изменить" onClick={() => setFormDialog({ kind: "tag", title: "Метки заметки", value: tags[activeDoc.id] ?? "", hint: "Метки через запятую" })}><Hash size={13} aria-hidden="true" />{noteTagList.length > 0 ? noteTagList.map((tag) => <span key={tag} className="status-tag">{tag}</span>) : <span className="status-tags-empty">добавить метки</span>}</button></>}
             </div>

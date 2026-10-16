@@ -19,6 +19,8 @@ public interface IHostUi
     string? PickBackupOpenPath();
     /// <summary>Native confirmation before anything is replaced. Must show the counts and mention the rollback copy.</summary>
     bool ConfirmRestore(BackupInfo backup, int currentNotes);
+    /// <summary>Shows a file of the data folder in Windows Explorer. A host without a window may ignore it.</summary>
+    void RevealFile(string path) { }
 }
 
 public sealed class BridgeException : Exception
@@ -148,6 +150,14 @@ public sealed class BridgeDispatcher
             case "readHistory": { var r = Read<HistoryRequest>(payload); return _store.ReadHistory(r.Id, r.Name); }
             case "importWindowsSnapshot": return ImportSnapshot();
             case "openFiles": return OpenFiles();
+            case "revealNote":
+            {
+                var r = Read<IdRequest>(payload); RequireId(r.Id);
+                var path = _store.Paths.ContentPath(r.Id);
+                if (!File.Exists(path)) throw new BridgeException("not-found", "Файл заметки ещё не записан на диск.");
+                _ui.RevealFile(path);
+                return new { };
+            }
             case "saveAsset":
             {
                 var r = Read<AssetRequest>(payload);
