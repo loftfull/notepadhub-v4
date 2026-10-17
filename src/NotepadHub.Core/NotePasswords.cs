@@ -162,7 +162,7 @@ public sealed partial class NoteStore
             n.IsProtected = false; n.LockSalt = ""; n.LockCheck = "";
             n.UpdatedUtc = Now();
             SaveMeta(n);
-            _keys.Remove(id);
+            if (_keys.Remove(id, out var forgotten)) CryptographicOperations.ZeroMemory(forgotten);
             _search[id] = IndexKey(n, content);
             return n.Clone();
         }

@@ -2,7 +2,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { loadTs } from "./helpers/loadTs.mjs";
-const { parseAiBlocks } = await loadTs("../src/aiBlocks.ts");
+const loaded = await loadTs("../src/aiBlocks.ts");
+const { parseAiBlocks } = loaded;
 
 const markdown = (text) => [{ type: "paragraph", content: text }];
 
@@ -24,4 +25,20 @@ test("data and file addresses are refused too", () => {
     const blocks = parseAiBlocks(markdown, `![x](${url})`);
     assert.ok(!blocks.some((b) => b.type === "image"), url);
   }
+});
+
+test("a foreign picture inside a list item (a nested block) is checked too", () => {
+  const nested = [{ type: "bulletListItem", content: "пункт", children: [{ type: "image", props: { url: "https://evil.example/x.png", caption: "п" } }, { type: "video", props: { url: "https://evil.example/v.mp4" } }] }];
+  const blocks = parseAiBlocks(() => nested, "- пункт");
+  assert.ok(!JSON.stringify(blocks).includes("evil.example"));
+  assert.equal(blocks[0].children.length, 2);
+  assert.ok(blocks[0].children.every((b) => b.type === "paragraph"));
+});
+
+test("an address with the assets host inside the user name or another scheme is refused", () => {
+  const { isOwnAssetUrl } = loaded;
+  assert.equal(isOwnAssetUrl("https://assets.notepadhub.local/a.png"), true);
+  assert.equal(isOwnAssetUrl("https://assets.notepadhub.local@evil.example/a.png"), false);
+  assert.equal(isOwnAssetUrl("http://assets.notepadhub.local/a.png"), false);
+  assert.equal(isOwnAssetUrl("not a url"), false);
 });

@@ -155,4 +155,20 @@ public class NotePasswordTests
         Assert.Equal("Новая заметка", s.FindMeta(n.Id)!.Title);
         Assert.DoesNotContain("отпуск", File.ReadAllText(t.Paths.MetaPath(n.Id)));
     }
+
+    [Fact]
+    public void A_protected_note_cannot_be_tied_to_a_file_on_disk()
+    {
+        using var t = new TempRoot();
+        using var s = t.Open();
+        var n = s.CreateNote("inbox", Secret, "Личное");
+        s.SetPassword(n.Id, "лето2026");
+        Assert.Throws<InvalidOperationException>(() => s.SetWriteThrough(n.Id, true));
+        var file = Path.Combine(t.Path, "tied.txt");
+        File.WriteAllText(file, "text");
+        var imported = s.ImportFile(file, "inbox");
+        s.SetPassword(imported.Id, "лето2026");
+        Assert.Throws<InvalidOperationException>(() => s.OpenInPlace(file, "inbox"));
+        Assert.DoesNotContain("отпуск", File.ReadAllText(file));
+    }
 }

@@ -132,6 +132,11 @@ try {
   await sleep(600);
   check("a paragraph can be copied across from the comparison", (await page.locator(".toast").allInnerTexts()).some((t) => t.includes("Абзац добавлен")));
   await page.locator(".compare-modal .form-submit").click();
+  // copy to the left: select a paragraph of the right note and move it into the left one
+  await page.locator(".second-column [data-content-type='paragraph']", { hasText: "птиц" }).first().click({ clickCount: 3 });
+  await page.getByRole("button", { name: /Копировать влево/ }).click();
+  await sleep(1200);
+  check("the selected text of the right note is copied into the left note", (await page.evaluate(() => document.querySelector(".editor-column:not(.second-column) .bn-editor")?.innerText ?? "")).includes("птиц"));
   // swap and close
   await page.getByRole("button", { name: "Поменять заметки местами" }).click();
   await sleep(1200);

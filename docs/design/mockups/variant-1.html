@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Вариант 1: классический</title>
+<style>
+*{box-sizing:border-box}body{margin:0;width:1440px;height:900px;font:14px "Segoe UI",sans-serif;color:#1f1f1f;background:#eef1f6;display:flex;flex-direction:column}
+.top{height:56px;background:#fff;border-bottom:1px solid #e7e9ee;display:flex;align-items:center;gap:16px;padding:0 20px}
+.logo{font-weight:600;display:flex;gap:8px;align-items:center}.logo i{width:24px;height:24px;border-radius:6px;background:#0a64c8;display:inline-block}
+.crumb{color:#626262}.crumb b{color:#1f1f1f}.sp{flex:1}.btn{height:32px;padding:0 14px;border-radius:8px;border:1px solid #e1e4ea;background:#fff;display:inline-flex;align-items:center}.ai{background:#0a64c8;color:#fff;border:0}
+.main{flex:1;display:flex;min-height:0}
+.side{width:280px;background:#f8f9fb;border-right:1px solid #e7e9ee;padding:14px 12px;display:flex;flex-direction:column;gap:6px}
+.h{font-weight:600;font-size:13px;color:#444;padding:6px 8px;display:flex;justify-content:space-between}
+.row{height:32px;border-radius:8px;display:flex;align-items:center;padding:0 10px;gap:8px;font-size:13.5px}.row.sel{background:#e3effc;color:#0b4f9c;font-weight:600}.row span{margin-left:auto;color:#777;font-size:12px}
+.grp{font-size:11.5px;letter-spacing:.04em;color:#777;padding:8px 10px 2px}
+.tiles{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:6px}.tile{height:34px;border:1px solid #e1e4ea;background:#fff;border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:13px}
+.center{flex:1;display:flex;flex-direction:column;min-width:0}
+.tabs{height:42px;background:#fff;border-bottom:1px solid #e7e9ee;display:flex}.tab{padding:0 18px;display:flex;align-items:center;border-right:1px solid #eee;color:#555}.tab.on{border-top:2px solid #0a64c8;font-weight:600;color:#111}
+.paper{margin:22px auto;width:760px;background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(20,27,38,.14);padding:48px 64px;flex:1;overflow:hidden}
+h1{font-size:30px;margin:0 0 14px}p{line-height:1.6;margin:8px 0}
+.status{height:34px;background:#fff;border-top:1px solid #e7e9ee;display:flex;align-items:center;gap:10px;padding:0 14px;font-size:12.5px;color:#555}.status .sp{flex:1}
+.lbl{position:absolute;right:16px;top:70px;background:#fff8d6;border:1px solid #e8d37a;padding:8px 12px;border-radius:8px;font-size:13px;max-width:300px}
+</style></head><body>
+<div class="top"><div class="logo"><i></i>Notepad Hub</div><div class="crumb">Работа / <b>План релиза</b></div><div class="sp"></div><div class="btn">↶</div><div class="btn">↷</div><div class="btn ai">✦ AI</div><div class="btn">🔍</div><div class="btn">⋯</div></div>
+<div class="main">
+<div class="side">
+<div class="h">Проекты <span>＋</span></div>
+<div class="row">▤ Все заметки<span>62</span></div><div class="row">▸ Входящие<span>4</span></div><div class="row sel">▾ Работа<span>12</span></div><div class="row" style="margin-left:18px">▸ Клиенты<span>5</span></div><div class="row">▸ Личное<span>9</span></div>
+<div class="h" style="margin-top:8px">Заметки ⇅ ▦</div>
+<div class="grp">СЕГОДНЯ</div><div class="row sel">▤ План релиза</div><div class="row">▤ Договор</div><div class="row">▤ Список покупок</div>
+<div class="grp">ВЧЕРА</div><div class="row">▤ Идеи для сайта</div>
+<div class="tiles"><div class="tile">★ Избранное</div><div class="tile">◷ Недавние</div><div class="tile">▣ Архив</div><div class="tile">🗑 Корзина</div></div>
+<div class="row" style="margin-top:6px">⚙ Настройки<span>◧</span></div>
+</div>
+<div class="center"><div class="tabs"><div class="tab on">План релиза</div><div class="tab">Договор</div><div class="tab">Идеи для сайта</div><div class="tab">＋</div></div>
+<div class="paper"><h1>План релиза</h1><p>Проверить сценарии создания, поиска и восстановления заметки.</p><p>Собрать рабочую версию, которой удобно пользоваться каждый день.</p><p>☐ Финальный проход доступности и тёмной темы<br>☑ Создание и автосохранение заметки<br>☐ Проверка восстановления из архива и корзины</p></div></div>
+</div>
+<div class="status"><span>✓ Сохранено</span><span>· Изменено 17 окт., 10:12</span><span class="sp"></span><span>👁 Фокус</span><span>▯ Сравнение</span><span>＃ Метки</span><span>· Строка 2 из 5, столбец 13</span><span>· 38 слов · 241 знак</span><span>· − 100% +</span></div>
+<div class="lbl"><b>Вариант 1. Классический.</b> Библиотека слева, вкладки сверху, лист по центру, служебная строка внизу. Так устроено сейчас.</div>
+</body></html>

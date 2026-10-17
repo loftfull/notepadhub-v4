@@ -861,6 +861,8 @@ public sealed partial class NoteStore : IDisposable
         lock (_sync)
         {
             var n = _notes.FirstOrDefault(x => x.Id == id) ?? throw new KeyNotFoundException("Заметка не найдена.");
+            if (on && n.IsProtected)
+                throw new InvalidOperationException("Заметка защищена паролем: сохранять её в файл нельзя, файл получил бы открытый текст. Сначала снимите пароль.");
             if (on && (IsExternalOnly(n) || !IsAllowedSource(n)))
                 throw new InvalidOperationException("У этой заметки нет файла на локальном диске, в который можно сохранять.");
             var set = Settings.WriteThroughIds.ToHashSet(StringComparer.Ordinal);
@@ -874,6 +876,8 @@ public sealed partial class NoteStore : IDisposable
     public NoteMeta OpenInPlace(string path, string? projectId)
     {
         var note = ImportFile(path, projectId);
+        if (note.IsProtected)
+            throw new InvalidOperationException("Эта заметка защищена паролем: файл нельзя связать с ней, пока пароль не снят.");
         try
         {
             if (!IsExternalOnly(note) && IsAllowedSource(note))

@@ -552,13 +552,16 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     text: blockToText(block),
   })).filter((item) => item.text.trim());
   // AI context "note + linked notes": explicit, capped, read-only. Outgoing links first, then backlinks; at most 5 notes, 3000 characters each.
+  const aiOnline = aiProvider !== "ollama" && !(aiProvider === "compat" && Boolean(aiProviders?.compat?.local) && !cloudModelName(aiModel));
   const linkedDocs = useMemo(() => {
     if (!activeId) return [] as DocItem[];
     const ids: string[] = [];
     for (const link of linkIndex.outgoing(activeId)) if (link.id && link.id !== activeId && !ids.includes(link.id)) ids.push(link.id);
     for (const back of linkIndex.backlinks(activeId)) if (!ids.includes(back.id)) ids.push(back.id);
-    return ids.slice(0, 5).map((id) => docs.find((doc) => doc.id === id)).filter((doc): doc is DocItem => Boolean(doc));
-  }, [activeId, linkIndex, docs]);
+    return ids.map((id) => docs.find((doc) => doc.id === id))
+      .filter((doc): doc is DocItem => Boolean(doc) && !doc!.deletedAt && !doc!.locked && !(doc!.protected && aiOnline))   // a protected note never goes to an online service, a trashed one is not sent at all
+      .slice(0, 5);
+  }, [activeId, linkIndex, docs, aiOnline]);
   const buildLinkedEntries = (startIndex: number, budget: number) => {
     const entries: Array<{ marker: string; blockId: string; label: string; text: string }> = [];
     const titles: string[] = [];
@@ -1028,7 +1031,15 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   useEffect(() => {
     if (trashPurgedRef.current || !isHosted() || docs.length === 0) return;
     trashPurgedRef.current = true;
-    const old = expiredIds(docs.filter((doc) => doc.deletedAt).map((doc) => ({ id: doc.id, deletedAt: String(doc.deletedAt) })));
+    // two clocks, both must be older than 30 days: the date of the last change (data of version 3 may keep an old one) and the day this app first saw the note in the trash
+    let seen: Record<string, string> = {};
+    try { seen = JSON.parse(window.localStorage.getItem("nh4-trash-seen") ?? "{}") as Record<string, string>; } catch { /* first start */ }
+    const trashed = docs.filter((doc) => doc.deletedAt).map((doc) => ({ id: doc.id, deletedAt: String(doc.deletedAt) }));
+    const firstSeen: Record<string, string> = {};
+    for (const item of trashed) firstSeen[item.id] = seen[item.id] ?? new Date().toISOString();
+    try { window.localStorage.setItem("nh4-trash-seen", JSON.stringify(firstSeen)); } catch { /* optional */ }
+    const byChange = new Set(expiredIds(trashed));
+    const old = expiredIds(trashed.map((item) => ({ id: item.id, deletedAt: firstSeen[item.id] }))).filter((id) => byChange.has(id));
     if (old.length) void deleteForever(old).then((n) => { if (n) setNotice(`Из корзины удалено старых заметок (больше 30 дней): ${n}`); });
   }, [deleteForever, docs]);
 
@@ -1591,8 +1602,9 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     let startId: string | undefined;
     try { const here = editor.getTextCursorPosition().block; if (here.type === "image") startId = here.id; } catch { /* no cursor */ }
     const note = editor.document.map((block) => blockText(block.content)).filter((t) => t.trim()).join(" ").replace(/\s+/g, " ").slice(0, 400);
-    setImageDialog({ kind, selection: editor.getSelectedText(), note, startId, ...(prompt ? { prompt } : {}) });
-  }, [editor]);
+    const hide = Boolean(activeDoc?.protected);   // the text of a protected note is not offered as a picture prompt (it would go to the picture service)
+    setImageDialog({ kind, selection: hide ? "" : editor.getSelectedText(), note: hide ? "" : note, startId, ...(prompt && !hide ? { prompt } : {}) });
+  }, [activeDoc, editor]);
 
   const insertGeneratedImage = useCallback((url: string, caption: string) => {
     const anchor = (() => { try { return editor.getTextCursorPosition().block; } catch { return editor.document[editor.document.length - 1]; } })();

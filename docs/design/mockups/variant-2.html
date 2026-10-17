@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Вариант 2: три колонки</title>
+<style>
+*{box-sizing:border-box}body{margin:0;width:1440px;height:900px;font:14px "Segoe UI",sans-serif;color:#1f1f1f;background:#f3f4f7;display:flex}
+.rail{width:56px;background:#1f2430;display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0;color:#c9ced8}.rail i{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-style:normal}.rail i.on{background:#34405a;color:#fff}.rail .sp{flex:1}
+.tree{width:230px;background:#f8f9fb;border-right:1px solid #e3e6ec;padding:14px 10px;display:flex;flex-direction:column;gap:4px}
+.t{height:30px;border-radius:7px;display:flex;align-items:center;padding:0 10px;font-size:13.5px;gap:8px}.t.sel{background:#e3effc;color:#0b4f9c;font-weight:600}.t span{margin-left:auto;color:#777;font-size:12px}
+.hd{font-weight:600;font-size:12px;color:#777;padding:10px 10px 4px;letter-spacing:.04em}
+.list{width:340px;background:#fff;border-right:1px solid #e3e6ec;display:flex;flex-direction:column}
+.lh{height:52px;display:flex;align-items:center;padding:0 14px;gap:10px;border-bottom:1px solid #eee}.search{flex:1;height:32px;border:1px solid #e1e4ea;border-radius:8px;display:flex;align-items:center;padding:0 10px;color:#888}
+.card{padding:12px 16px;border-bottom:1px solid #f0f1f4}.card.sel{background:#eef5fd;box-shadow:inset 3px 0 0 #0a64c8}.card b{display:block;margin-bottom:3px}.card small{color:#777;display:block;line-height:1.4}.card em{font-style:normal;color:#0b4f9c;font-size:12px}
+.gl{font-size:11.5px;letter-spacing:.04em;color:#777;padding:10px 16px 2px}
+.doc{flex:1;display:flex;flex-direction:column;background:#fff}
+.dh{height:52px;display:flex;align-items:center;padding:0 22px;gap:14px;border-bottom:1px solid #eee;color:#666}.dh b{color:#111}.sp{flex:1}.btn{height:30px;padding:0 12px;border:1px solid #e1e4ea;border-radius:8px;display:inline-flex;align-items:center;font-size:13px}.ai{background:#0a64c8;color:#fff;border:0}
+.body{flex:1;padding:40px 70px;max-width:880px}h1{font-size:30px;margin:0 0 14px}p{line-height:1.65;margin:8px 0}
+.st{height:32px;border-top:1px solid #eee;display:flex;align-items:center;gap:12px;padding:0 16px;font-size:12.5px;color:#555}
+.lbl{position:absolute;right:16px;bottom:44px;background:#fff8d6;border:1px solid #e8d37a;padding:8px 12px;border-radius:8px;font-size:13px;max-width:330px}
+</style></head><body>
+<div class="rail"><i class="on">▤</i><i>★</i><i>◷</i><i>▣</i><i>🗑</i><div class="sp"></div><i>⚙</i></div>
+<div class="tree"><div class="hd">ПРОЕКТЫ</div><div class="t">▤ Все заметки<span>62</span></div><div class="t">▸ Входящие<span>4</span></div><div class="t sel">▾ Работа<span>12</span></div><div class="t" style="margin-left:16px">▸ Клиенты<span>5</span></div><div class="t">▸ Личное<span>9</span></div><div class="hd">МЕТКИ</div><div class="t">＃ работа<span>7</span></div><div class="t">＃ идеи<span>3</span></div><div class="hd">КАЛЕНДАРЬ</div><div class="t" style="height:120px;border:1px solid #e1e4ea;background:#fff;color:#888;justify-content:center">октябрь 2026</div></div>
+<div class="list"><div class="lh"><div class="search">🔍 Поиск по всем заметкам</div><div class="btn">＋</div></div>
+<div class="gl">ЗАКРЕПЛЁННЫЕ</div><div class="card"><b>★ Список покупок</b><small>Хлеб, овощи, чай и корм для кота.</small></div>
+<div class="gl">СЕГОДНЯ</div><div class="card sel"><b>План релиза</b><small>Проверить сценарии создания, поиска и восстановления…</small><em>Работа · 10:12</em></div><div class="card"><b>Договор</b><small>Текст договора с клиентом…</small><em>Клиенты · 09:40</em></div>
+<div class="gl">ВЧЕРА</div><div class="card"><b>Идеи для сайта</b><small>Главная страница, отзывы, цены…</small><em>Личное · 16 окт.</em></div></div>
+<div class="doc"><div class="dh"><span>Работа / <b>План релиза</b></span><div class="sp"></div><div class="btn">↶</div><div class="btn">↷</div><div class="btn ai">✦ AI</div><div class="btn">⋯</div></div>
+<div class="body"><h1>План релиза</h1><p>Проверить сценарии создания, поиска и восстановления заметки.</p><p>Собрать рабочую версию, которой удобно пользоваться каждый день.</p><p>☐ Финальный проход доступности и тёмной темы<br>☑ Создание и автосохранение заметки<br>☐ Проверка восстановления из архива и корзины</p></div>
+<div class="st"><span>✓ Сохранено</span><span class="sp"></span><span>Фокус</span><span>Сравнение</span><span>Метки</span><span>38 слов · 241 знак</span><span>100%</span></div></div>
+<div class="lbl"><b>Вариант 2. Три колонки.</b> Узкая колонка значков, дерево проектов с метками и календарём, список заметок карточками (название, начало, проект, время), текст справа. Вкладок нет: открытые заметки выбираются в списке.</div>
+</body></html>
