@@ -6,7 +6,7 @@ import { ImageEditDialog, ImageGenerateDialog, type NoteImage } from "./componen
 import { META_INSTRUCTION, parseMetaAnswer, suggestTags, suggestTitle } from "./noteMeta";
 import { INSIGHTS_HEADING, MAX_INSTRUCTION, TRANSFORMATIONS, insightMarkdown, loadCustom, saveCustom, type Transformation } from "./transformations";
 import { TransformationsDialog } from "./components/TransformationsDialog";
-import { TrashView } from "./components/TrashView";
+import { TrashView, expiredIds } from "./components/TrashView";
 import { LockScreen, PasswordDialog } from "./components/PasswordParts";
 import { Fold } from "./components/Fold";
 import { calculate, formatResult, trailingExpression } from "./calc";
@@ -37,6 +37,7 @@ import type { DocItem, LabState } from "./labState";
 import { host, isHosted, onHostEvent, type HistoryEntry } from "./bridge";
 import { EDITOR_LIMIT_CHARS, toLabState, type HostSync, type LoadedHost } from "./hostAdapter";
 import { blocksToText, textToBlocks, type LooseBlock } from "./textFormat";
+import { parseAiBlocks } from "./aiBlocks";
 import { decodeTextBytes, looksBinary } from "./decodeText";
 
 const AI_EDIT_MAX_OUTPUT_TOKENS = 512;
@@ -191,30 +192,6 @@ function noteAsMarkdown(blocks: ReadonlyArray<{ type?: string; props?: Record<st
       default: return text;
     }
   }).filter(Boolean).join("\n\n");
-}
-
-/** Markdown from the AI back into blocks: tables and pictures go through our own reader (it understands the pipe rows the AI was shown), the rest through BlockNote's Markdown parser. */
-function parseAiBlocks(parseMarkdown: (markdown: string) => PartialBlock[], text: string): PartialBlock[] {
-  const rich = (line: string) => line.startsWith("| ") || /^!\[[^\]\n]*\]\(\S+\)$/.test(line);
-  const out: PartialBlock[] = [];
-  const all = text.split("\n");
-  let i = 0;
-  while (i < all.length) {
-    const kind = rich(all[i]);
-    let j = i;
-    while (j < all.length && rich(all[j]) === kind) j++;
-    const chunk = all.slice(i, j).join("\n");
-    if (kind) out.push(...(textToBlocks(chunk) as PartialBlock[]));
-    else if (chunk.trim()) out.push(...parseMarkdown(chunk));
-    i = j;
-  }
-  // a model answer may only point at pictures that are already stored next to the notes; any other address would be loaded by the page and could carry note text out
-  return out.map((block) => {
-    const url = block.type === "image" ? String((block.props as { url?: string } | undefined)?.url ?? "") : "";
-    if (block.type !== "image" || url.startsWith("https://assets.notepadhub.local/")) return block;
-    const alt = String((block.props as { caption?: string; name?: string } | undefined)?.caption || (block.props as { name?: string } | undefined)?.name || "").trim();
-    return { type: "paragraph", content: alt ? `[${alt}]` : "" } as PartialBlock;
-  });
 }
 
 function escapeHtml(value: string): string {
@@ -1051,8 +1028,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
   useEffect(() => {
     if (trashPurgedRef.current || !isHosted() || docs.length === 0) return;
     trashPurgedRef.current = true;
-    const limit = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    const old = docs.filter((doc) => doc.deletedAt && Date.parse(String(doc.deletedAt)) < limit).map((doc) => doc.id);
+    const old = expiredIds(docs.filter((doc) => doc.deletedAt).map((doc) => ({ id: doc.id, deletedAt: String(doc.deletedAt) })));
     if (old.length) void deleteForever(old).then((n) => { if (n) setNotice(`Из корзины удалено старых заметок (больше 30 дней): ${n}`); });
   }, [deleteForever, docs]);
 
@@ -1148,6 +1124,10 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     }
     if (aiProvider === "compat" && !aiProviders?.compat?.configured) {
       setAiError("Внешний сервис не настроен: выберите его в настройках AI и сохраните адрес и ключ.");
+      return;
+    }
+    if (activeDoc?.protected && aiProvider !== "ollama" && !(aiProvider === "compat" && aiProviders?.compat?.local && !cloudModelName(aiModel))) {
+      setAiError("Заметка защищена паролем: её текст не отправляется во внешний сервис. Выберите «На компьютере» или снимите пароль.");
       return;
     }
     if (aiProvider !== "ollama" && !(aiProvider === "compat" && aiProviders?.compat?.local && !cloudModelName(aiModel)) && !aiRemoteConsent) {
@@ -1538,11 +1518,13 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     if (!activeId || formatJob) return;
     const text = noteAsMarkdown(editor.document);
     if (!text.trim()) { setNotice("В заметке пока нет текста."); return; }
+    const onlineService = aiProvider !== "ollama" && !(aiProvider === "compat" && Boolean(aiProviders?.compat?.local) && !cloudModelName(aiModel));
+    if (activeDoc?.protected && onlineService) { applySafeFormat("Заметка защищена паролем: текст не уходит во внешний сервис. "); return; }
     const aiReady = aiProvider === "ollama" || aiRemoteConsent || (aiProvider === "compat" && Boolean(aiProviders?.compat?.local));
     if (!aiReady || text.length > 12000) { applySafeFormat(aiReady ? "Заметка длинная для ИИ. " : "ИИ-оформление выключено (нет согласия на отправку). "); return; }
     setNotice("ИИ оформляет заметку…");
     setFormatJob({ id: activeId, stage: "wait" });
-  }, [activeId, aiProvider, aiProviders, aiRemoteConsent, applySafeFormat, editor, formatJob]);
+  }, [activeDoc, activeId, aiModel, aiProvider, aiProviders, aiRemoteConsent, applySafeFormat, editor, formatJob]);
   runAutoFormatCoreRef.current = runAutoFormatCore;
 
   useEffect(() => {

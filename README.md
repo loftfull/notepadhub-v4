@@ -17,7 +17,7 @@ src/NotepadHub.Host/bin/Debug/net8.0-windows/NotepadHub4.exe
 |---|---|
 | Модульные тесты интерфейса | `cd ui && npm test` |
 | Тесты ядра | `dotnet test tests/NotepadHub.Core.Tests` |
-| Окно программы (Playwright по CDP на копии профиля) | `node tests/e2e/host-e2e.mjs <NotepadHub4.exe> <профиль.zip>` (также `features2`, `features3`, `paste`) |
+| Окно программы (Playwright по CDP на копии профиля) | `node tests/e2e/host-e2e.mjs <NotepadHub4.exe> <профиль.zip>` (также `features2`, `features3`, `paste`, `layout`, `ideas`, `passwords`, `journey`) |
 
 Сквозные тесты используют архив профиля владельца (в репозиторий не входит) и Playwright из `~/.local/share/orca-design-tools`. Без них запускайте первые две строки таблицы.
 

@@ -114,4 +114,45 @@ public class NotePasswordTests
             Assert.Equal(Secret, again.Open(id, markOpened: false).Content);
         }
     }
+
+    [Fact]
+    public void Reloading_the_files_forgets_every_key_so_a_restored_copy_is_asked_for_its_own_password()
+    {
+        using var t = new TempRoot();
+        using var s = t.Open();
+        var n = s.CreateNote("inbox", Secret, "Личное");
+        s.SetPassword(n.Id, "лето2026");
+        Assert.True(s.IsUnlocked(n.Id));
+        s.ReloadFromDisk();
+        Assert.False(s.IsUnlocked(n.Id));
+        Assert.True(s.Open(n.Id, markOpened: false).Locked);
+        s.UnlockNote(n.Id, "лето2026");
+        Assert.Equal(Secret, s.Open(n.Id, markOpened: false).Content);
+    }
+
+    [Fact]
+    public void A_changed_cipher_text_is_refused_and_never_returned_as_text()
+    {
+        using var t = new TempRoot();
+        using var s = t.Open();
+        var n = s.CreateNote("inbox", Secret, "Личное");
+        s.SetPassword(n.Id, "лето2026");
+        var path = t.Paths.ContentPath(n.Id);
+        var text = File.ReadAllText(path);
+        var broken = text[..^6] + (text[^6] == 'A' ? "B" : "A") + text[^5..];
+        File.WriteAllText(path, broken);
+        Assert.Throws<InvalidDataException>(() => s.Open(n.Id, markOpened: false));
+    }
+
+    [Fact]
+    public void A_protected_note_with_the_default_title_does_not_take_its_title_from_the_text()
+    {
+        using var t = new TempRoot();
+        using var s = t.Open();
+        var n = s.CreateNote("inbox", "", "Новая заметка");
+        s.SetPassword(n.Id, "лето2026");
+        s.Upsert(new NoteStore.UpsertRequest { Id = n.Id, Content = Secret });
+        Assert.Equal("Новая заметка", s.FindMeta(n.Id)!.Title);
+        Assert.DoesNotContain("отпуск", File.ReadAllText(t.Paths.MetaPath(n.Id)));
+    }
 }

@@ -1,8 +1,8 @@
 # Прогресс проекта NotepadHub_v4
 
-Собрано `progress_ledger.py` 2026-10-17 09:21. Не править руками: файл пересобирается.
+Собрано `progress_ledger.py` 2026-10-17 09:58. Не править руками: файл пересобирается.
 
-- Ветка: `main`; хэш кода: `129907974ad18d27`; несохранённых изменений: 9
+- Ветка: `main`; хэш кода: `c373936d80ce8314`; несохранённых изменений: 22
 - Ворота: пройдено 11, не пройдено 3
 - Требования владельца: 37; без указанной проверки: 0
 
@@ -22,11 +22,12 @@
 | R33 | 2026-10-17 | «разный шрифт, нет правильного центрирования» | `layout-e2e.mjs` |
 | R34 | 2026-10-17 | «продолжай» после разбора: рекомендованные пункты из сравнения с топовыми приложениями | `ideas-e2e.mjs` |
 | R35 | 2026-10-17 | «шаблоны не нужны, пароль можно, несколько окон не нужно» | `NotePasswordTests.cs`, `passwords-e2e.mjs` |
-| R36 | 2026-10-17 | «найти и реализовать крутые анимационные фишки» | `layout-e2e.mjs` (ничего не сломано), снимки |
+| R36 | 2026-10-17 | «найти и реализовать крутые анимационные фишки» | `ideas-e2e.mjs` (анимация окна запускается, при «уменьшить д |
 | R37 | 2026-10-17 | Из разбора плана SingularityApp: вычисление выражения в тексте (Alt и =, команда палитры), | `calc.test.mjs`, `ideas-e2e.mjs` |
 
 ## Последние изменения
 
+- 69b45da 2026-10-17 AI_CONTEXT, PROGRESS ledger, journey.cmd; evidence refreshed by the vault tool
 - 25418fc 2026-10-17 Audit of the design process and the Obsidian vault
 - 8ac04f5 2026-10-17 Fix the cold-start timing assertion that failed CI on every push; review of external claims
 - dd77e16 2026-10-17 Calculation in text (Alt+=), HTML export, SingularityApp analysis; block side menu stays off (it destabilised image and password scenarios)
@@ -38,7 +39,6 @@
 - 6b996a9 2026-10-16 Fix test infra, AI SSRF/cancel paths, line endings, import decoding; add print, dev AI guard, CI
 - 0c459e6 2026-10-16 Pick several notes (Ctrl/Shift), bulk move/archive/trash, drag notes to projects
 - 7e24505 2026-10-16 Status bar buttons (Focus, Compare, Tags), collapse button to sidebar bottom, no back/forward, Notepad parity (print, save as txt, F5, go to line, caret position, wrap, font), one UI font
-- 8f99851 2026-10-16 QuickNote ideas: all notes row, found word lit in the opened note, modified time, focus mode (F11)
 
 ## Ждёт решения владельца
 

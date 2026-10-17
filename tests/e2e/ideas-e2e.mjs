@@ -296,6 +296,20 @@ try {
   await page.locator("summary[aria-label='Дополнительные действия заметки']").click();
   check("the note menu offers the HTML page", (await page.locator(".note-menu .note-toolbar-menu").getByRole("button", { name: /Сохранить как страницу HTML/ }).count()) === 1);
   await page.keyboard.press("Escape");
+
+  // ---- motion: the dialog animates, and the system switch 'reduce motion' shortens it to ~1 ms
+  await page.getByRole("button", { name: "Добавить проект" }).click();
+  await page.locator(".form-modal").waitFor({ timeout: 5000 });
+  const dialogAnim = await page.evaluate(() => getComputedStyle(document.querySelector(".form-modal")).animationName);
+  check("a dialog comes in with the 'dialog-in' animation", dialogAnim === "dialog-in", dialogAnim);
+  await page.getByRole("button", { name: "Отмена" }).click();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("button", { name: "Добавить проект" }).click();
+  await page.locator(".form-modal").waitFor({ timeout: 5000 });
+  const reducedMs = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector(".form-modal")).animationDuration) * 1000);
+  check("with 'reduce motion' the dialog animation lasts about 1 ms", reducedMs <= 2, String(reducedMs));
+  await page.getByRole("button", { name: "Отмена" }).click();
+  await page.emulateMedia({ reducedMotion: "no-preference" });
 } catch (e) {
   check("scenario completed without exceptions", false, String(e.message ?? e).split("\n").slice(0, 5).join(" | "));
 } finally {

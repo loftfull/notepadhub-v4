@@ -85,6 +85,7 @@ public sealed partial class NoteStore : IDisposable
     /// <summary>Re-reads folders and notes from disk after files were replaced (restore). Memory is rebuilt from what is on disk.</summary>
     public void ReloadFromDisk()
     {
+        RelockNotes();   // the files are replaced (restore from a copy): the keys of the old files are useless
         lock (_sync)
         {
             LoadProjects();
@@ -391,7 +392,7 @@ public sealed partial class NoteStore : IDisposable
         {
             n.UpdatedUtc = Now();
             if (!string.IsNullOrWhiteSpace(title)) n.Title = Truncate(title!.Trim(), 120);
-            else if (n.Title == "Новая заметка" || string.IsNullOrWhiteSpace(n.Title)) n.Title = AutoTitle(content);
+            else if (!n.IsProtected && (n.Title == "Новая заметка" || string.IsNullOrWhiteSpace(n.Title))) n.Title = AutoTitle(content);
             n.ContentType = DetectContentType(n.SourcePath, content);
             SaveMeta(n);
             _search[n.Id] = IndexKey(n, content);
@@ -444,7 +445,7 @@ public sealed partial class NoteStore : IDisposable
                 WriteContent(id, content);
                 if (r.BlocksJson != null) WriteBlocks(id, r.BlocksJson, content); else DeleteBlocks(id);
                 n.ContentType = DetectContentType(n.SourcePath, content);
-                if (string.IsNullOrWhiteSpace(r.Title) && (created || n.Title == "Новая заметка")) n.Title = AutoTitle(content);
+                if (string.IsNullOrWhiteSpace(r.Title) && !n.IsProtected && (created || n.Title == "Новая заметка")) n.Title = AutoTitle(content);
             }
             else if (created) WriteContent(id, "");
             n.UpdatedUtc = Now();

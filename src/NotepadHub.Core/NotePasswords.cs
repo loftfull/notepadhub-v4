@@ -89,6 +89,8 @@ public sealed partial class NoteStore
     {
         password ??= "";
         if (password.Length < MinPasswordLength) throw new ArgumentException($"Пароль короче {MinPasswordLength} знаков.");
+        var salt = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
+        var key = DeriveKey(password, salt);   // 600 000 rounds: not under the lock, the window must not freeze
         lock (_sync)
         {
             var n = _notes.FirstOrDefault(x => x.Id == id) ?? throw new KeyNotFoundException("Заметка не найдена.");
@@ -98,8 +100,6 @@ public sealed partial class NoteStore
             var content = ReadContent(id);
             var blocks = File.Exists(Paths.BlocksPath(id)) ? File.ReadAllText(Paths.BlocksPath(id), Encoding.UTF8) : null;
             var history = HistoryFiles(id).Select(f => (file: f, text: ReadTextFile(f))).ToList();
-            var salt = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
-            var key = DeriveKey(password, salt);
             // metadata first: if the program stops half way, plain files under a protected note are still read (see Unprotect) and encrypted on the next save
             n.LockSalt = salt; n.LockCheck = Encrypt(key, "nh4"); n.IsProtected = true; n.UpdatedUtc = Now();
             SaveMeta(n);
@@ -133,7 +133,11 @@ public sealed partial class NoteStore
     /// <summary>Forgets the key of one note, or of all of them (id empty).</summary>
     public void RelockNotes(string? id = null)
     {
-        lock (_sync) { if (string.IsNullOrEmpty(id)) _keys.Clear(); else _keys.Remove(id); }
+        lock (_sync)
+        {
+            if (string.IsNullOrEmpty(id)) { foreach (var k in _keys.Values) CryptographicOperations.ZeroMemory(k); _keys.Clear(); }
+            else if (_keys.Remove(id, out var key)) CryptographicOperations.ZeroMemory(key);
+        }
     }
 
     public int UnlockedCount { get { lock (_sync) return _keys.Count; } }
@@ -141,10 +145,12 @@ public sealed partial class NoteStore
     /// <summary>Takes the password off: the files become plain again.</summary>
     public NoteMeta RemovePassword(string id, string password)
     {
+        NoteMeta snapshot;
+        lock (_sync) snapshot = (_notes.FirstOrDefault(x => x.Id == id) ?? throw new KeyNotFoundException("Заметка не найдена.")).Clone();
+        var key = CheckPassword(snapshot, password);   // slow: outside the lock
         lock (_sync)
         {
             var n = _notes.FirstOrDefault(x => x.Id == id) ?? throw new KeyNotFoundException("Заметка не найдена.");
-            var key = CheckPassword(n, password);
             _keys[id] = key;
             var content = ReadContent(id);
             var blocks = File.Exists(Paths.BlocksPath(id)) ? Unprotect(id, File.ReadAllText(Paths.BlocksPath(id), Encoding.UTF8)) : null;

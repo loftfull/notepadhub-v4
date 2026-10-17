@@ -22,6 +22,11 @@ export function daysLeft(iso: string, now = Date.now()): number {
   return Number.isFinite(age) ? Math.max(0, TRASH_DAYS - Math.floor(age / DAY)) : TRASH_DAYS;
 }
 
+/** Ids of the notes that have lain in the trash for TRASH_DAYS days or more (the app removes them for good when it starts). */
+export function expiredIds(items: ReadonlyArray<{ id: string; deletedAt: string }>, now = Date.now()): string[] {
+  return items.filter((item) => Number.isFinite(Date.parse(item.deletedAt)) && now - Date.parse(item.deletedAt) > TRASH_DAYS * DAY).map((item) => item.id);
+}
+
 /** The trash as a list in the main area: what was deleted and when, restore or delete for good on every row, clean all at the bottom. */
 export function TrashView({ items, onRestore, onDeleteForever, onOpen, onEmpty }: {
   items: TrashItem[];
