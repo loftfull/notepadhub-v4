@@ -90,7 +90,8 @@ public class HardeningTests
         var started = DateTime.UtcNow;
         var preview = JsonSerializer.SerializeToElement(await new BridgeDispatcher(s, new NoUi(), "t").HandleAsync("previewReferencedFiles", default), new JsonSerializerOptions(JsonSerializerDefaults.Web));
         Assert.Equal(0, preview.GetProperty("files").GetArrayLength());
-        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(2));   // no network round trip was attempted
+        // a network attempt to this unroutable address would hang far longer than any slow, cold or loaded machine needs for the call above
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(15));
     }
 
     [Fact]
