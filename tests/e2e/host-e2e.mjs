@@ -321,6 +321,11 @@ try {
   await page.waitForFunction(() => { const b = [...document.querySelectorAll("button")].find((x) => x.textContent?.trim() === "Исправить"); return b && !b.disabled; }, null, { timeout: 15000 });
   await run.click();
   const gotAnswer = await page.waitForFunction(() => document.body.innerText.includes("ФЕЙК-ОТВЕТ МОДЕЛИ"), null, { timeout: 20000 }).then(() => true).catch(() => false);
+  if (!gotAnswer) {
+    const logLines = (() => { try { const dir = path.join(root, "data-v3", "..", "logs"); const f = fs.readdirSync(dir)[0]; return fs.readFileSync(path.join(dir, f), "utf8").split(/\r?\n/).filter((l) => l.includes(" ai ")).slice(-6); } catch (e) { return [String(e)]; } })();
+    const state = await page.evaluate(() => ({ stored: localStorage.getItem("nh4-ai-provider"), radios: [...document.querySelectorAll(".ais-seg [role=radio]")].map((r) => r.textContent + ":" + r.getAttribute("aria-checked")), service: document.querySelector(".ais-service")?.textContent?.slice(0, 120), modelSelect: document.querySelector("select[aria-label='Выбрать модель']")?.value ?? null }));
+    console.log("DIAG ai-flake:", JSON.stringify({ chatBodies, logLines, state }));
+  }
   check("AI answer streams from the host into the proposal", gotAnswer, `chatCalls=${chatBodies}`);
   check("only the local model was called (one chat request)", chatBodies === 1);
   // AI context "note + linked notes": the linked note's text is in the request, result is read-only

@@ -641,6 +641,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
     setAiModelsLoading(true);
     setAiModelsError("");
     getAiModels(aiProvider, controller.signal).then(({ models, hidden }) => {
+      if (controller.signal.aborted) return;   // the provider changed while the list was coming: that list belongs to the other provider
       setAiHiddenModels(hidden);
       setAiModels(models);
       setAiModel((current) => models.some((model) => model.id === current) ? current : models[0]?.id ?? "");
@@ -2772,7 +2773,7 @@ export default function App({ initial, sync }: { initial: LoadedHost; sync: Host
         compactMode={aiCompactMode}
         onExpandAdvanced={() => setAiCompactMode(false)}
         provider={aiProvider}
-        onProviderChange={(provider) => { setAiProvider(provider); setAiModel(""); setAiProposal(null); setAiError(""); }}
+        onProviderChange={(provider) => { setAiProvider(provider); setAiModel(""); setAiModels([]); setAiHiddenModels([]); setAiModelsLoading(true); setAiProposal(null); setAiError(""); }}   // the old list is dropped at once: a model of the previous provider must never be sent to the new one
         model={aiModel}
         onModelChange={setAiModel}
         models={aiModels}
